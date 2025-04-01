@@ -74,9 +74,40 @@ export class Game {
     // Clock for delta time.
     this.clock = new THREE.Clock();
 
-    // Create the player (central node) and add it to the scene.
-    this.player = new Player();
+    // Create the player.
+    this.player = new Player(this.scene);
     this.scene.add(this.player.mesh);
+
+    // Set up a callback so that when the player’s knife attack reaches its hit moment,
+    // we check for nearby enemies and apply damage.
+    this.player.onKnifeHit = (damage) => {
+      console.log('Knife hit! Damage:', damage);
+      const knifeRange = 10; // Define your knife range.
+      
+      // Compute the player's forward direction (assuming local forward is -Z).
+      const forward = new THREE.Vector3(0, 0, 1);
+      forward.applyQuaternion(this.player.mesh.quaternion).normalize();
+      
+      this.enemySpawner.enemies.forEach(enemy => {
+        // Compute the vector from the player to the enemy.
+        const toEnemy = enemy.mesh.position.clone().sub(this.player.mesh.position);
+        const distance = toEnemy.length();
+        console.log('Distance to enemy:', distance);
+        console.log('knifeRange:', knifeRange);
+        
+        if (distance < knifeRange) {
+          // Normalize to get the direction.
+          toEnemy.normalize();
+          // Check if the enemy is in front of the player.
+          if (forward.dot(toEnemy) > 0) { // dot > 0 means enemy is in front.
+            console.log('Enemy hit! Damage:', damage);
+            enemy.takeDamage(damage);
+          }
+        }
+      });
+    };
+    
+    
 
     // Enemy spawner to handle enemy creation.
     this.enemySpawner = new EnemySpawner(this.scene, this.player);
