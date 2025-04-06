@@ -195,6 +195,11 @@ export class Player {
     this.activeAction = newAction;
   }
 
+  heal(amount) {
+    this.health = Math.min(100, this.health + amount);
+    console.log(`Healed! Current health: ${this.health}`);
+  }
+
   takeDamage(amount) {
     this.health -= amount;
     if (this.health <= 0) {
