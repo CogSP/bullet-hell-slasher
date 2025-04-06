@@ -19,7 +19,7 @@ export class Game {
     const textureLoader = new THREE.TextureLoader();
     // https://www.fab.com/listings/42e25675-17ba-4205-a155-bd9216519ca1
     const groundTexture = textureLoader.load('assets/ground/japanese_shrine_stone_floor_ugrxbjkfa_ue_high/Textures/T_ugrxbjkfa_4K_B.png'); // update with your texture path
-
+    
     // Enable repeat wrapping so the texture tiles across the surface
     groundTexture.wrapS = THREE.RepeatWrapping;
     groundTexture.wrapT = THREE.RepeatWrapping;
@@ -77,6 +77,7 @@ export class Game {
     // Setup renderer.
     this.renderer = new THREE.WebGLRenderer({ antialias: true });
     this.renderer.setSize(container.clientWidth, container.clientHeight);
+    //this.renderer.setPixelRatio(window.devicePixelRatio); // Optional but recommended
     container.appendChild(this.renderer.domElement);
 
     // Clock for delta time.
@@ -133,6 +134,8 @@ export class Game {
 
     // UI overlay for health and score.
     this.ui = new UI();
+    this.ui.camera = this.camera;
+    
 
     // Array to hold active bullets.
     this.bullets = [];
@@ -205,7 +208,7 @@ export class Game {
     this.cameraFollow = true; // By default, camera follows the player.
     this.ui.onToggleCameraFollow = () => {
       this.cameraFollow = !this.cameraFollow;
-      this.ui.showMessage("Camera " + (this.cameraFollow ? "Following" : "Fixed"), 2);
+      this.ui.showFloatingMessage("Camera " + (this.cameraFollow ? "Following" : "Fixed"), this.player.mesh.position.clone());
     };
 
   }
@@ -282,14 +285,18 @@ export class Game {
     this.bulletHellActive = true;
     this.bulletHellTimer = this.bulletHellDuration;
     console.log("BULLET HELL Activated!");
-    this.ui.showMessage("BULLET HELL Activated!", 3);
+    this.ui.showFloatingMessage(
+      "🔥 BULLET HELL! 🔥",
+      this.player.mesh.position.clone(),
+      { fontSize: 'px', color: 'red', duration: 3 }
+    );
   }
 
   activateUltraAutoBulletPowerup() {
     this.ultraAutoBulletPowerupActive = true;
     this.ultraAutoBulletPowerupTimer = this.ultraAutoBulletPowerupDuration;
     console.log("Ultra Auto Bullet Powerup Activated!");
-    this.ui.showMessage("Ultra Auto Bullet Powerup Activated!", 3);
+    this.ui.showFloatingMessage("⚡ Ultra Auto Bullet Powerup Activated!", this.player.mesh.position.clone());
   }  
 
   activateMegaAutoBulletPowerup() {
@@ -297,7 +304,7 @@ export class Game {
     this.megaAutoBulletPowerupTimer = this.megaAutoBulletPowerupDuration;
     console.log("Mega Auto Bullet Powerup Activated!");
     // Display a message on the screen.
-    this.ui.showMessage("Mega Auto Bullet Powerup Activated!", 3);
+    this.ui.showFloatingMessage("⚡ Mega Auto Bullet Powerup Activated!", this.player.mesh.position.clone());
   }
   
   activateAutoBulletPowerup() {
@@ -305,7 +312,7 @@ export class Game {
     this.autoBulletPowerupTimer = this.autoBulletPowerupDuration;
     console.log("Auto Bullet Powerup Activated!");
     // Display a message on screen.
-    this.ui.showMessage("Auto Bullet Powerup Activated!", 3);
+    this.ui.showFloatingMessage("⚡ Auto Bullet Powerup Activated!", this.player.mesh.position.clone());
     // Reset the auto bullet cooldown so that the burst fires immediately.
     this.autoBulletCooldownTimer = 0;
   }
@@ -315,7 +322,7 @@ export class Game {
     this.knifeSpeedPowerupTimer = this.knifeSpeedPowerupDuration;
     console.log("Knife Speed Powerup Activated!");
     // Display a message on screen.
-    this.ui.showMessage("Knife Speed Powerup Activated!", 3);
+    this.ui.showFloatingMessage("⚡ Knife Speed Powerup Activated!", this.player.mesh.position.clone());
   }
   
   
@@ -324,7 +331,7 @@ export class Game {
     this.attackVelocityBuffTimer = this.attackVelocityBuffDuration;
     console.log("Attack velocity buff activated!");
     // Display a message on the screen.
-    this.ui.showMessage("Attack Velocity Buff Activated!", 3);
+    this.ui.showFloatingMessage("⚡ Knife Buff!", this.player.mesh.position.clone());
   }  
 
   onWindowResize() {
@@ -564,8 +571,8 @@ export class Game {
       if (collected) {
         this.scene.remove(heart.mesh);
         this.pickups.splice(i, 1);
-        this.ui.showMessage("💖 Healed!", 1.5);
-      }
+        this.ui.showFloatingMessage("+20 HP 💖", this.player.mesh.position.clone());
+      }      
     }
 
 
