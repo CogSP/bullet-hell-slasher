@@ -52,16 +52,17 @@ export class Player {
           // Listen for the finished event to reset the knife flag.
           this.mixer.addEventListener('finished', (event) => {
             if (event.action === this.actions.knife) {
-              // Reset flags when the knife attack finishes.
               console.log('Knife attack finished:', event.action.time);
               this.isAttacking = false;
               this.knifeDamageApplied = false; // Reset knife damage flag.
+              // Reset the knife attack speed back to normal.
+              this.actions.knife.timeScale = 1;
               // Optionally return to idle.
               if (this.actions.idle) {
                 this.fadeToAction('idle');
               }
             }
-          });
+          });          
           
           // Start with idle by default.
           if (this.actions.idle) {
@@ -79,42 +80,56 @@ export class Player {
     );
   }
 
-  update(delta, input) {
+  update(delta, input, cameraAngle, knifeAttackSpeedMultiplier) {
     // Update the animation mixer.
-
     if (this.mixer) {
       this.mixer.update(delta);
     }
     if (!this.mesh) return;
-
-    // If K is pressed, trigger knife attack (only once).
+  
+    // Handle knife attack: check for key K.
     if (input['KeyK'] && this.actions.knife && !this.isAttacking) {
       this.fadeToAction('knife');
+      // Increase the knife attack speed by adjusting the timeScale.
+      this.actions.knife.timeScale = knifeAttackSpeedMultiplier;
       this.isAttacking = true;
       input['KeyK'] = false;
-      console.log('Knife attack triggered:', this.actions.knife.time);
+      console.log('Knife attack triggered with multiplier:', knifeAttackSpeedMultiplier);
       return;
     }
-
-    // Handle movement.
-    const direction = new THREE.Vector3();
-    if (input['KeyW']) direction.z -= 1;
-    if (input['KeyS']) direction.z += 1;
-    if (input['KeyA']) direction.x -= 1;
-    if (input['KeyD']) direction.x += 1;
-
-    if (direction.length() > 0) {
-      direction.normalize();
-      this.velocity.copy(direction).multiplyScalar(this.speed);
-      const movement = direction.multiplyScalar(this.speed * delta);
+  
+    // Gather input values.
+    let forwardInput = 0;
+    let rightInput = 0;
+    if (input['KeyW']) forwardInput += 1;
+    if (input['KeyS']) forwardInput -= 1;
+    if (input['KeyD']) rightInput += 1;
+    if (input['KeyA']) rightInput -= 1;
+  
+    // Calculate camera's forward and right vectors (projected onto the XZ plane).
+    // Forward points in the direction the camera is looking (toward the scene center).
+    const cameraForward = new THREE.Vector3(-Math.cos(cameraAngle), 0, -Math.sin(cameraAngle));
+    // Right is perpendicular to forward.
+    const cameraRight = new THREE.Vector3(Math.sin(cameraAngle), 0, -Math.cos(cameraAngle));
+  
+    // Combine inputs to get the movement direction.
+    const moveDir = new THREE.Vector3();
+    moveDir.addScaledVector(cameraForward, forwardInput);
+    moveDir.addScaledVector(cameraRight, rightInput);
+  
+    // If there's any input, normalize and apply movement.
+    if (moveDir.length() > 0) {
+      moveDir.normalize();
+      this.velocity.copy(moveDir).multiplyScalar(this.speed);
+      const movement = moveDir.clone().multiplyScalar(this.speed * delta);
       this.mesh.position.add(movement);
-
-      // Orient the player to face the movement direction.
-      const targetPosition = this.mesh.position.clone().add(direction);
+  
+      // Rotate the player to face the movement direction.
+      const targetPosition = this.mesh.position.clone().add(moveDir);
       targetPosition.y = this.mesh.position.y;
       this.mesh.lookAt(targetPosition);
-
-      // If not attacking, choose run or walk.
+  
+      // Switch animations based on movement.
       if (!this.isAttacking) {
         if (input['ShiftLeft'] && this.actions.run) {
           this.fadeToAction('run');
@@ -129,15 +144,42 @@ export class Player {
       }
     }
     
+    // Handle knife damage during the knife attack.
     if (this.activeAction === this.actions.knife) {
       if (!this.knifeDamageApplied) {
-        const damage = 1
+        const damage = 1;
         if (this.onKnifeHit) {
           this.onKnifeHit(damage);
         }
         this.knifeDamageApplied = true;
       }
-    }    
+    }
+
+    // Update the graphical buff effect
+    if (knifeAttackSpeedMultiplier > 1) {
+      this.setBuffEffect(true);
+    } else {
+      this.setBuffEffect(false);
+    }
+
+  }
+ 
+  
+  setBuffEffect(enabled) {
+    // Traverse through all children of the player's mesh.
+    this.mesh.traverse(child => {
+      if (child.isMesh && child.material) {
+        // If enabling the effect, set an emissive color and intensity.
+        if (enabled) {
+          child.material.emissive = new THREE.Color(0xffff00); // Yellow glow.
+          child.material.emissiveIntensity = 0.5;
+        } else {
+          // Reset emissive properties.
+          child.material.emissive = new THREE.Color(0x000000);
+          child.material.emissiveIntensity = 0;
+        }
+      }
+    });
   }
 
   // Smooth crossfade between actions.

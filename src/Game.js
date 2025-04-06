@@ -42,7 +42,6 @@ export class Game {
     // Add the ground to the scene
     this.scene.add(groundMesh);
 
-
     // Setup camera.
     const aspect = container.clientWidth / container.clientHeight;
     const viewSize = 100; // Adjust this value to zoom in/out
@@ -61,11 +60,18 @@ export class Game {
     this.camera.position.set(20, 20, 20); 
     this.camera.lookAt(new THREE.Vector3(0, 0, 0));
     
-    // Optionally, if your model isn’t oriented as expected, apply an additional rotation.
-    // For example, if your model’s front is facing the opposite direction:
-    // this.camera.rotateY(Math.PI);
+    // --- New: Store initial camera state ---
+    // Calculate the angle (in the XZ plane) from the camera's position.
+    this.initialCameraAngle = Math.atan2(this.camera.position.z, this.camera.position.x); // ~45° in radians
+    this.cameraAngle = this.initialCameraAngle;
+    // Calculate the distance from the center (ignoring Y).
+    this.cameraDistance = Math.sqrt(
+      this.camera.position.x * this.camera.position.x +
+      this.camera.position.z * this.camera.position.z
+    );
+    // Store the camera's height.
+    this.cameraHeight = this.camera.position.y;
     
-
     // Setup renderer.
     this.renderer = new THREE.WebGLRenderer({ antialias: true });
     this.renderer.setSize(container.clientWidth, container.clientHeight);
@@ -101,7 +107,14 @@ export class Game {
           // Check if the enemy is in front of the player.
           if (forward.dot(toEnemy) > 0) { // dot > 0 means enemy is in front.
             console.log('Enemy hit! Damage:', damage);
-            enemy.takeDamage(damage);
+            const enemyDead = enemy.takeDamage(damage);
+            if (enemyDead) {
+              // Remove enemy from scene if health reaches 0
+              this.enemySpawner.removeEnemy(enemy);
+
+              // Record the kill.
+              this.registerEnemyKill();
+            }
           }
         }
       });
@@ -117,6 +130,21 @@ export class Game {
 
     // Array to hold active bullets.
     this.bullets = [];
+
+    // After initializing existing variables like this.bullets
+    this.killTimestamps = [];             // Existing kill tracking for first powerup.
+    this.attackVelocityBuffActive = false; // First powerup flag.
+    this.attackVelocityBuffDuration = 10;  // First powerup duration (seconds).
+    this.attackVelocityBuffTimer = 0;      // First powerup timer.
+    this.attackVelocityBuffMultiplier = 2; // Buff multiplier for knife speed.
+
+    // New variables for the second powerup:
+    this.autoBulletKillCount = 0;          // Count of additional kills while first powerup is active.
+    this.autoBulletPowerupActive = false;  // Second powerup flag.
+    this.autoBulletPowerupDuration = 5;    // Duration for second powerup (seconds).
+    this.autoBulletPowerupTimer = 0;       // Timer for the second powerup.
+    this.autoBulletCooldown = 1;           // Interval between auto-shoot bursts (seconds).
+    this.autoBulletCooldownTimer = 0;      // Timer for auto-shoot bursts.
 
     // Create an input object to track key states.
     this.input = {};
@@ -141,7 +169,57 @@ export class Game {
     window.addEventListener('keyup', (event) => {
       this.input[event.code] = false;
     });
+
+
+    this.cameraFollow = true; // By default, camera follows the player.
+    this.ui.onToggleCameraFollow = () => {
+      this.cameraFollow = !this.cameraFollow;
+      this.ui.showMessage("Camera " + (this.cameraFollow ? "Following" : "Fixed"), 2);
+    };
+
   }
+
+  registerEnemyKill() {
+    const now = this.clock.elapsedTime;
+    // Record the kill time.
+    this.killTimestamps.push(now);
+    // Remove kills older than 30 seconds.
+    this.killTimestamps = this.killTimestamps.filter(ts => now - ts <= 30);
+    
+    // Check for the first powerup condition.
+    if (!this.attackVelocityBuffActive && this.killTimestamps.length >= 5) {
+      this.activateAttackVelocityBuff();
+    }
+    
+    // When the first buff is active, track additional kills for the second powerup.
+    if (this.attackVelocityBuffActive && !this.autoBulletPowerupActive) {
+      this.autoBulletKillCount++;
+      if (this.autoBulletKillCount >= 10) {
+        this.activateAutoBulletPowerup();
+        // Optionally, reset the counter.
+        this.autoBulletKillCount = 0;
+      }
+    }
+  }  
+
+  activateAutoBulletPowerup() {
+    this.autoBulletPowerupActive = true;
+    this.autoBulletPowerupTimer = this.autoBulletPowerupDuration;
+    console.log("Auto Bullet Powerup Activated!");
+    // Display a message on screen.
+    this.ui.showMessage("Auto Bullet Powerup Activated!", 3);
+    // Reset the auto bullet cooldown so that the burst fires immediately.
+    this.autoBulletCooldownTimer = 0;
+  }
+  
+  
+  activateAttackVelocityBuff() {
+    this.attackVelocityBuffActive = true;
+    this.attackVelocityBuffTimer = this.attackVelocityBuffDuration;
+    console.log("Attack velocity buff activated!");
+    // Display a message on the screen.
+    this.ui.showMessage("Attack Velocity Buff Activated!", 3);
+  }  
 
   onWindowResize() {
     const aspect = this.container.clientWidth / this.container.clientHeight;
@@ -172,12 +250,14 @@ export class Game {
     raycaster.ray.intersectPlane(plane, intersectionPoint);
 
     if (intersectionPoint) {
-      // Calculate direction from the player's current position to the intersection point.
       const direction = intersectionPoint.sub(this.player.mesh.position).normalize();
-      // Create a new bullet from the player's current position.
       const bullet = new Bullet(this.player.mesh.position.clone(), direction);
-      // Add the player's current velocity to the bullet's velocity.
+      // Add the player's current velocity to the bullet.
       bullet.velocity.add(this.player.velocity);
+      // Apply buff: increase bullet speed if the buff is active.
+      if (this.attackVelocityBuffActive) {
+        bullet.velocity.multiplyScalar(this.attackVelocityBuffMultiplier);
+      }
       this.bullets.push(bullet);
       this.scene.add(bullet.mesh);
     }
@@ -192,7 +272,9 @@ export class Game {
     const delta = this.clock.getDelta();
 
     // Update player movement with the current input.
-    this.player.update(delta, this.input);
+    // Pass the knife attack speed multiplier to the player update.
+    const knifeAttackSpeedMultiplier = this.attackVelocityBuffActive ? this.attackVelocityBuffMultiplier : 1;
+    this.player.update(delta, this.input, this.cameraAngle, knifeAttackSpeedMultiplier);
 
     // Update the enemy spawner.
     this.enemySpawner.update(delta);
@@ -225,8 +307,6 @@ export class Game {
       }
     }
 
-
-    // Update each bullet.
     for (let i = this.bullets.length - 1; i >= 0; i--) {
       const bullet = this.bullets[i];
       bullet.update(delta);
@@ -241,8 +321,10 @@ export class Game {
           // Assume each bullet deals 1 damage.
           const enemyDead = enemy.takeDamage(1);
           if (enemyDead) {
+            // Remove enemy from scene if health reaches 0.
             this.enemySpawner.removeEnemy(enemy);
-            this.enemySpawner.score += 10;
+            // Record the kill.
+            this.registerEnemyKill();
           }
           // Remove the bullet after it hits.
           this.scene.remove(bullet.mesh);
@@ -251,15 +333,101 @@ export class Game {
         }
       }
 
-      // Optionally, remove bullets that travel too far.
+      // Remove bullets that travel too far.
       if (bullet.mesh.position.distanceTo(this.player.mesh.position) > 100) {
         this.scene.remove(bullet.mesh);
         this.bullets.splice(i, 1);
       }
     }
 
+    // --- Auto Bullet Powerup Logic ---
+    if (this.autoBulletPowerupActive) {
+      // Update the auto bullet powerup timer.
+      this.autoBulletPowerupTimer -= delta;
+      // Handle automatic bullet bursts.
+      this.autoBulletCooldownTimer -= delta;
+      if (this.autoBulletCooldownTimer <= 0) {
+        // Fire bullets in all directions.
+        const bulletCount = 8; // Adjust for more/less bullets.
+        for (let i = 0; i < bulletCount; i++) {
+          const angle = i * (2 * Math.PI / bulletCount);
+          const direction = new THREE.Vector3(Math.cos(angle), 0, Math.sin(angle));
+          const bullet = new Bullet(this.player.mesh.position.clone(), direction);
+          // Inherit player's current velocity.
+          bullet.velocity.add(this.player.velocity);
+          this.bullets.push(bullet);
+          this.scene.add(bullet.mesh);
+        }
+        // Reset the cooldown timer.
+        this.autoBulletCooldownTimer = this.autoBulletCooldown;
+      }
+      // If the auto bullet powerup duration has elapsed, disable it.
+      if (this.autoBulletPowerupTimer <= 0) {
+        this.autoBulletPowerupActive = false;
+        console.log("Auto Bullet Powerup expired.");
+      }
+    }
+
+
+    // --- First Powerup Timer Update ---
+    if (this.attackVelocityBuffActive) {
+      this.attackVelocityBuffTimer -= delta;
+      if (this.attackVelocityBuffTimer <= 0) {
+        this.attackVelocityBuffActive = false;
+        console.log("Attack velocity buff expired.");
+        // Optionally, reset kill timestamps and autoBulletKillCount.
+        this.killTimestamps = [];
+        this.autoBulletKillCount = 0;
+      }
+    }
+
     // Update the UI with current health and score.
     this.ui.update(this.player.health, this.enemySpawner.score);
+
+    // Update camera based on input 
+    const rotationSpeed = 1.0; // Radians per second
+
+    if (this.input['KeyQ']) {
+      // Rotate camera to the left.
+      this.cameraAngle -= delta * rotationSpeed;
+    }
+    if (this.input['KeyE']) {
+      // Rotate camera to the right.
+      this.cameraAngle += delta * rotationSpeed;
+    }
+    if (this.input['KeyC']) {
+      // Reset the camera to its original angle.
+      this.cameraAngle = this.initialCameraAngle;
+    }
+
+    // Position the camera based on follow mode.
+    if (this.cameraFollow && this.player.mesh) {
+      // Follow mode: camera's position is offset from the player's position.
+      this.camera.position.set(
+        this.player.mesh.position.x + this.cameraDistance * Math.cos(this.cameraAngle),
+        this.player.mesh.position.y + this.cameraHeight,
+        this.player.mesh.position.z + this.cameraDistance * Math.sin(this.cameraAngle)
+      );
+      this.camera.lookAt(this.player.mesh.position);
+    } else {
+      // Fixed mode: camera stays relative to the origin.
+      this.camera.position.set(
+        this.cameraDistance * Math.cos(this.cameraAngle),
+        this.cameraHeight,
+        this.cameraDistance * Math.sin(this.cameraAngle)
+      );
+      this.camera.lookAt(new THREE.Vector3(0, 0, 0));
+    }
+
+    if (this.attackVelocityBuffActive) {
+      this.attackVelocityBuffTimer -= delta;
+      if (this.attackVelocityBuffTimer <= 0) {
+        this.attackVelocityBuffActive = false;
+        console.log("Attack velocity buff expired.");
+        // Optionally clear kill timestamps or reset them.
+        this.killTimestamps = [];
+      }
+    }
 
     // Render the scene.
     this.renderer.render(this.scene, this.camera);
