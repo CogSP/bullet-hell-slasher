@@ -8,12 +8,12 @@ export class EnemySpawner {
 
     // Horde system
     this.currentWave = 1;
-    //this.enemiesPerWave = 5;   // Base number of enemies in the first wave
-    this.enemiesPerWave = 50000 // testing
+    this.enemiesPerWave = 5;   // Base number of enemies in the first wave
+    //this.enemiesPerWave = 50000 // testing
     this.spawnedEnemies = 0;
     this.maxEnemiesInWave = this.enemiesPerWave;
-    //this.spawnInterval = 1.0;
-    this.spawnInterval = 0.5 // testing
+    this.spawnInterval = 1.0;
+    //this.spawnInterval = 0.5 // testing
     this.spawnTimer = 0;
 
     this.waveInProgress = true;

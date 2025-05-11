@@ -16,6 +16,12 @@ export class Player {
     this.isAttacking = false;
     // Callback to be set by Game for handling knife damage.
     this.onKnifeHit = null;
+    this.maxStamina = 100;
+    this.stamina = this.maxStamina;
+    this.staminaRegenRate = 15;     // Stamina per second when not running
+    this.staminaDrainRate = 25;     // Stamina per second while running
+    this.canRun = true;             // Flag to prevent running when stamina is depleted
+
 
     const loader = new GLTFLoader();
     loader.load(
@@ -81,16 +87,12 @@ export class Player {
   }
 
   update(delta, input, cameraAngle, knifeAttackSpeedMultiplier) {
-    // Update the animation mixer.
-    if (this.mixer) {
-      this.mixer.update(delta);
-    }
+    if (this.mixer) this.mixer.update(delta);
     if (!this.mesh) return;
   
-    // Handle knife attack: check for key K.
+    // Handle knife attack
     if (input['KeyK'] && this.actions.knife && !this.isAttacking) {
       this.fadeToAction('knife');
-      // Increase the knife attack speed by adjusting the timeScale.
       this.actions.knife.timeScale = knifeAttackSpeedMultiplier;
       this.isAttacking = true;
       input['KeyK'] = false;
@@ -98,7 +100,7 @@ export class Player {
       return;
     }
   
-    // Gather input values.
+    // Gather input
     let forwardInput = 0;
     let rightInput = 0;
     if (input['KeyW']) forwardInput += 1;
@@ -106,63 +108,68 @@ export class Player {
     if (input['KeyD']) rightInput += 1;
     if (input['KeyA']) rightInput -= 1;
   
-    // Calculate camera's forward and right vectors (projected onto the XZ plane).
-    // Forward points in the direction the camera is looking (toward the scene center).
     const cameraForward = new THREE.Vector3(-Math.cos(cameraAngle), 0, -Math.sin(cameraAngle));
-    // Right is perpendicular to forward.
     const cameraRight = new THREE.Vector3(Math.sin(cameraAngle), 0, -Math.cos(cameraAngle));
-  
-    // Combine inputs to get the movement direction.
     const moveDir = new THREE.Vector3();
     moveDir.addScaledVector(cameraForward, forwardInput);
     moveDir.addScaledVector(cameraRight, rightInput);
   
-    // If there's any input, normalize and apply movement.
+    const isTryingToRun = input['ShiftLeft'] && this.canRun;
+    let currentSpeed = this.speed;
+  
     if (moveDir.length() > 0) {
       moveDir.normalize();
-      this.velocity.copy(moveDir).multiplyScalar(this.speed);
-      const movement = moveDir.clone().multiplyScalar(this.speed * delta);
+  
+      if (!this.isAttacking) {
+        if (isTryingToRun && this.actions.run) {
+          this.fadeToAction('run');
+          currentSpeed *= 1.8;
+          this.actions.run.timeScale = 1;
+  
+          // Drain stamina while running
+          this.stamina -= this.staminaDrainRate * delta;
+          if (this.stamina <= 0) {
+            this.stamina = 0;
+            this.canRun = false;
+          }
+        } else if (this.actions.walk) {
+          this.fadeToAction('walk');
+          this.actions.run.timeScale = 1;
+        }
+      }
+  
+      this.velocity.copy(moveDir).multiplyScalar(currentSpeed);
+      const movement = moveDir.clone().multiplyScalar(currentSpeed * delta);
       this.mesh.position.add(movement);
   
-      // Rotate the player to face the movement direction.
       const targetPosition = this.mesh.position.clone().add(moveDir);
       targetPosition.y = this.mesh.position.y;
       this.mesh.lookAt(targetPosition);
-  
-      // Switch animations based on movement.
-      if (!this.isAttacking) {
-        if (input['ShiftLeft'] && this.actions.run) {
-          this.fadeToAction('run');
-        } else if (this.actions.walk) {
-          this.fadeToAction('walk');
-        }
-      }
     } else {
       this.velocity.set(0, 0, 0);
       if (!this.isAttacking && this.actions.idle) {
         this.fadeToAction('idle');
       }
     }
-    
-    // Handle knife damage during the knife attack.
-    if (this.activeAction === this.actions.knife) {
-      if (!this.knifeDamageApplied) {
-        const damage = 1;
-        if (this.onKnifeHit) {
-          this.onKnifeHit(damage);
-        }
-        this.knifeDamageApplied = true;
+  
+    if (!isTryingToRun) {
+      this.stamina += this.staminaRegenRate * delta;
+      if (this.stamina >= this.maxStamina) {
+        this.stamina = this.maxStamina;
+        this.canRun = true;
       }
     }
-
-    // Update the graphical buff effect
-    if (knifeAttackSpeedMultiplier > 1) {
-      this.setBuffEffect(true);
-    } else {
-      this.setBuffEffect(false);
+  
+    // Knife damage logic
+    if (this.activeAction === this.actions.knife && !this.knifeDamageApplied) {
+      if (this.onKnifeHit) this.onKnifeHit(1);
+      this.knifeDamageApplied = true;
     }
-
+  
+    // Buff glow
+    this.setBuffEffect(knifeAttackSpeedMultiplier > 1);
   }
+  
  
   
   setBuffEffect(enabled) {
@@ -200,11 +207,64 @@ export class Player {
     console.log(`Healed! Current health: ${this.health}`);
   }
 
-  takeDamage(amount) {
-    this.health -= amount;
-    if (this.health <= 0) {
-      console.log('Game Over!');
-      // Implement game over logic.
+  showDamageEffects(amount) {
+    this.flashRed();
+    if (this.game && this.game.ui) {
+      this.game.ui.flashDamageOverlay();
+      this.game.ui.showFloatingMessage(`-${amount} HP`, this.mesh.position.clone());
     }
   }
+ 
+  takeDamage(amount, visualDelayMs = 700) {
+    this.health -= amount;
+
+    // schedule the flash/UI after the desired delay
+    if (visualDelayMs > 0) {
+      setTimeout(() => this.showDamageEffects(amount), visualDelayMs);
+    } else {
+      this.showDamageEffects(amount);
+    }
+
+    if (this.health <= 0) {
+      console.log("Game Over!");
+      // game-over logic …
+    }
+  }
+
+  flashRed(duration = 0.25) {
+    if (!this.mesh) return;
+  
+    // turn every visible mesh red and remember its colour
+    this.mesh.traverse(child => {
+      if (child.isMesh && child.material && child.material.color) {
+  
+        // store backup ONCE
+        if (!child.userData.originalColor) {
+          child.userData.originalColor = child.material.color.clone();
+        }
+  
+        child.material.color.set(0xff0000);
+      }
+    });
+  
+    // restore after the delay
+    setTimeout(() => this.resetColor(), duration * 1000);
+  }
+  
+  resetColor() {
+    if (!this.mesh) return;
+  
+    this.mesh.traverse(child => {
+      if (
+        child.isMesh &&
+        child.material &&
+        child.material.color &&
+        child.userData.originalColor          // <-- same key!
+      ) {
+        //child.material.color.copy(child.userData.originalColor);
+        child.material.color.set(0xffffff);
+      }
+    });
+  }
+  
 }

@@ -15,25 +15,61 @@ export class Game {
     this.scene = new THREE.Scene();
     this.scene.background = new THREE.Color(0x202020);
     
-    // Load a ground texture using TextureLoader
-    const textureLoader = new THREE.TextureLoader();
-    // https://www.fab.com/listings/42e25675-17ba-4205-a155-bd9216519ca1
-    const groundTexture = textureLoader.load('assets/ground/japanese_shrine_stone_floor_ugrxbjkfa_ue_high/Textures/T_ugrxbjkfa_4K_B.png'); // update with your texture path
+
+    // // Load a ground texture using TextureLoader
+    // const textureLoader = new THREE.TextureLoader();
+    // // https://www.fab.com/listings/42e25675-17ba-4205-a155-bd9216519ca1
+    // const groundTexture = textureLoader.load('assets/ground/japanese_shrine_stone_floor_ugrxbjkfa_ue_high/Textures/T_ugrxbjkfa_4K_B.png'); // update with your texture path
     
-    // Enable repeat wrapping so the texture tiles across the surface
-    groundTexture.wrapS = THREE.RepeatWrapping;
-    groundTexture.wrapT = THREE.RepeatWrapping;
+    // // Enable repeat wrapping so the texture tiles across the surface
+    // groundTexture.wrapS = THREE.RepeatWrapping;
+    // groundTexture.wrapT = THREE.RepeatWrapping;
 
-    // Set the repeat factors (adjust these to cover the map with the desired detail)
-    groundTexture.repeat.set(100, 100); // increase for more tiling
+    // // Set the repeat factors (adjust these to cover the map with the desired detail)
+    // groundTexture.repeat.set(100, 100); // increase for more tiling
 
-    // Optionally, improve texture quality at oblique angles
-    groundTexture.anisotropy = 16;
+    // // Optionally, improve texture quality at oblique angles
+    // groundTexture.anisotropy = 16;
+
+    /* ---------- PBR cobblestone ground (Step-1) ---------- */
+    const texLoader = new THREE.TextureLoader();
+
+    const gColor  = texLoader.load('assets/ground/pbr/ground_albedo.jpg');
+    const gNormal = texLoader.load('assets/ground/pbr/ground_normal.png');
+    const gRough  = texLoader.load('assets/ground/pbr/ground_rough.jpg');
+    const gAO     = texLoader.load('assets/ground/pbr/ground_ao.png');   // if you have it
+
+    // colour textures must be flagged as sRGB so lighting looks right
+    gColor.colorSpace = THREE.SRGBColorSpace;
+
+    // tile the texture across the plane (fewer, larger tiles than before)
+    const TILE_REPEAT = 40;
+    [gColor, gNormal, gRough, gAO].forEach(t => {
+      if (t) {
+        t.wrapS = t.wrapT = THREE.RepeatWrapping;
+        t.repeat.set(TILE_REPEAT, TILE_REPEAT);
+        t.anisotropy = 16;
+      }
+    });
+
+    const groundMaterial = new THREE.MeshStandardMaterial({
+      map:           gColor,
+      normalMap:     gNormal,
+      roughnessMap:  gRough,
+      aoMap:         gAO ?? undefined,
+      roughness:     1                             // let the texture drive it
+    });
+
+    // dial the bump strength up or down if needed
+    groundMaterial.normalScale.set(0.9, 0.9);
+    /* ----------------------------------------------------- */
+
+
 
     // Create a large plane geometry for the ground (e.g., 1000 x 1000 units)
     const groundGeometry = new THREE.PlaneGeometry(1000, 1000);
 
-    const groundMaterial = new THREE.MeshStandardMaterial({ map: groundTexture });
+    //const groundMaterial = new THREE.MeshStandardMaterial({ map: groundTexture });
     const groundMesh = new THREE.Mesh(groundGeometry, groundMaterial);
     groundMesh.rotation.x = -Math.PI / 2; // Make the plane horizontal.
     groundMesh.position.y = 0; // Set at ground level.
@@ -590,6 +626,8 @@ export class Game {
 
     // Update the UI with current health and score.
     this.ui.update(this.player.health, this.enemySpawner.score, this.enemySpawner.currentWave);
+    this.ui.updateStaminaBar((this.player.stamina / this.player.maxStamina) * 100);
+
 
     // Update camera based on input 
     const rotationSpeed = 1.0; // Radians per second

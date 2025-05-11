@@ -24,6 +24,39 @@ export class UI {
     this.messageDiv.style.display = 'none';
     document.body.appendChild(this.messageDiv);
 
+    // Create a container for the stamina bar
+    this.staminaBarContainer = document.createElement("div");
+    this.staminaBarContainer.style.position = "absolute";
+    this.staminaBarContainer.style.bottom = "35px"; // Slightly above bottom HUD
+    this.staminaBarContainer.style.left = "50%";
+    this.staminaBarContainer.style.transform = "translateX(-50%)";
+    this.staminaBarContainer.style.width = "300px";
+    this.staminaBarContainer.style.height = "16px";
+    this.staminaBarContainer.style.border = "2px solid white";
+    this.staminaBarContainer.style.background = "rgba(0, 0, 0, 0.5)";
+    document.body.appendChild(this.staminaBarContainer);
+
+    // Create the actual stamina bar
+    this.staminaBar = document.createElement("div");
+    this.staminaBar.style.height = "100%";
+    this.staminaBar.style.width = "100%";
+    this.staminaBar.style.background = "#00BFFF"; // DeepSkyBlue
+    this.staminaBarContainer.appendChild(this.staminaBar);
+
+
+    this.damageOverlay = document.createElement("div");
+    this.damageOverlay.style.position = "absolute";
+    this.damageOverlay.style.top = 0;
+    this.damageOverlay.style.left = 0;
+    this.damageOverlay.style.width = "100%";
+    this.damageOverlay.style.height = "100%";
+    this.damageOverlay.style.backgroundColor = "rgba(255, 0, 0, 0.3)";
+    this.damageOverlay.style.opacity = 0;
+    this.damageOverlay.style.transition = "opacity 0.3s";
+    this.damageOverlay.style.pointerEvents = "none";
+    document.body.appendChild(this.damageOverlay);
+    
+
     // Create a container for the powerup bar.
     this.powerupBarContainer = document.createElement("div");
     this.powerupBarContainer.style.position = "absolute";
@@ -84,7 +117,7 @@ export class UI {
     this.hudRight.style.gap = "15px";
 
     const tip = document.createElement("span");
-    tip.innerText = "💬 Press K to slash!";
+    //tip.innerText = "💬 Press K to slash!";
 
     this.cameraToggleButton = document.createElement("button");
     this.cameraToggleButton.innerText = "Toggle Camera Follow";
@@ -195,4 +228,25 @@ export class UI {
       this.powerupLabel.style.display = "block";
     }
   }
+
+  updateStaminaBar(percentage) {
+    this.staminaBar.style.width = `${Math.max(0, Math.min(percentage, 100))}%`;
+
+    // Optionally change color based on level
+    if (percentage > 50) {
+      this.staminaBar.style.background = "#00BFFF"; // Normal (DeepSkyBlue)
+    } else if (percentage > 20) {
+      this.staminaBar.style.background = "#FFD700"; // Warning (Gold)
+    } else {
+      this.staminaBar.style.background = "#FF4500"; // Low (OrangeRed)
+    }
+  }
+
+  flashDamageOverlay() {
+    this.damageOverlay.style.opacity = 1;
+    setTimeout(() => {
+      this.damageOverlay.style.opacity = 0;
+    }, 100);
+  }
+  
 }
