@@ -2,11 +2,14 @@ import * as THREE from 'three';
 import { GLTFLoader } from 'https://cdn.jsdelivr.net/npm/three@0.150.1/examples/jsm/loaders/GLTFLoader.js';
 
 export class Enemy {
-  constructor(player) {
+  constructor(player, mass = 1) {
+    this.mass = mass
     this.player = player;
     this.maxHealth = 3;
     this.health = 3;
-    this.speed = 5;
+    this.speed = 15;
+    this.mass = 1;                   // tweak later
+    this.velocity  = new THREE.Vector3(); // will hold knock-back & sliding
     this.radius = 1;
     this.isAttacking = false; // flag to track attack state
     this.hasDamaged = false;  // flag to track if damage was applied in current cycle
@@ -107,7 +110,12 @@ export class Enemy {
     return false;
   }
 
-  update(delta, camera) { 
+  update(delta, camera) {
+    
+    // before position update
+    this.velocity.lerp(new THREE.Vector3(), delta * 0.1);   // cheap air-drag
+    this.mesh.position.addScaledVector(this.velocity, delta);
+
     // Check the distance to the player to determine if the enemy should attack.
     const distanceToPlayer = this.mesh.position.distanceTo(this.player.mesh.position); 
     const attackThreshold = 5; // Adjust threshold distance as needed
@@ -126,11 +134,18 @@ export class Enemy {
       }
     }
     
-    // Optionally, stop movement when attacking.
     if (!this.isAttacking) {
-      const direction = this.player.mesh.position.clone().sub(this.mesh.position).normalize();
-      this.mesh.position.add(direction.multiplyScalar(this.speed * delta));
+      // accelerate toward the player
+      const dir = this.player.mesh.position.clone().sub(this.mesh.position).normalize().multiplyScalar(this.speed);
+      this.velocity.addScaledVector(dir, delta);
     }
+
+    /* simple air-drag so they eventually stop */
+    this.velocity.multiplyScalar(Math.exp(-4 * delta)); // 4 ≈ damping factor
+
+    // move by whatever velocity they currently have
+    this.mesh.position.addScaledVector(this.velocity, delta);
+    
     
     // Ensure the enemy faces the player.
     this.mesh.lookAt(this.player.mesh.position);

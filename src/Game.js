@@ -109,7 +109,11 @@ export class Game {
     );
     // Store the camera's height.
     this.cameraHeight = this.camera.position.y;
+
+    this.cameraVel = new THREE.Vector3();   // starts at rest
+    this.fixedCameraCenter = new THREE.Vector3(); // “orbit-about” point in fixed mode
     
+
     // Setup renderer.
     this.renderer = new THREE.WebGLRenderer({ antialias: true });
     this.renderer.setSize(container.clientWidth, container.clientHeight);
@@ -157,6 +161,13 @@ export class Game {
 
               // Record the kill.
               this.registerEnemyKill(enemy);
+            }
+            else {
+              // Knock-back impulse when the knife hits
+              const knockback = damage * 10;   // impulse magnitude
+              enemy.velocity.add(              // Δv = J / m
+                toEnemy.clone().multiplyScalar(knockback / enemy.mass)
+              );
             }
           }
         }
@@ -241,11 +252,23 @@ export class Game {
     });
 
 
-    this.cameraFollow = true; // By default, camera follows the player.
     this.ui.onToggleCameraFollow = () => {
       this.cameraFollow = !this.cameraFollow;
-      this.ui.showFloatingMessage("Camera " + (this.cameraFollow ? "Following" : "Fixed"), this.player.mesh.position.clone());
+    
+      if (!this.cameraFollow) {
+        /* turning FOLLOW → FIXED
+           remember the spot where we’ll keep looking,
+           and stop the spring motion */
+        this.fixedCameraCenter.copy(this.player.mesh.position);
+        this.cameraVel.set(0, 0, 0);
+      }
+    
+      this.ui.showFloatingMessage(
+        "Camera " + (this.cameraFollow ? "Following" : "Fixed"),
+        this.player.mesh.position.clone()
+      );
     };
+    
 
   }
 
@@ -470,8 +493,11 @@ export class Game {
         const collisionDistance = bullet.radius + enemy.radius;
         const distance = bullet.mesh.position.distanceTo(enemy.mesh.position);
         if (distance < collisionDistance) {
-          // Assume each bullet deals 1 damage.
-          const enemyDead = enemy.takeDamage(1);
+          // kinetic energy E = ½ m v²  (use v² = |v|² to avoid a sqrt) for bullet damage calculation
+          const energy  = 0.5 * bullet.mass * bullet.velocity.lengthSq();
+          const baseDmg = energy * 0.08;           // 0.08 ⇒ ≈1 damage at 25 m/s & 0.05 kg
+          const dmg     = bullet.damage ?? baseDmg; // if power-ups set bullet.damage, use that
+          const enemyDead = enemy.takeDamage(dmg);
           if (enemyDead) {
             // Remove enemy from scene if health reaches 0.
             this.enemySpawner.removeEnemy(enemy);
@@ -641,29 +667,82 @@ export class Game {
       this.cameraAngle += delta * rotationSpeed;
     }
     if (this.input['KeyC']) {
-      // Reset the camera to its original angle.
+      // 1. reset desired angle
       this.cameraAngle = this.initialCameraAngle;
+    
+      // 2. kill any residual spring velocity
+      this.cameraVel.set(0, 0, 0);
+    
+      // 3. (optional but nice) snap to the new target immediately
+      const snapTarget = this.player.mesh.position.clone().add(
+        new THREE.Vector3(
+          this.cameraDistance * Math.cos(this.cameraAngle),
+          this.cameraHeight,
+          this.cameraDistance * Math.sin(this.cameraAngle)
+        )
+      );
+      this.camera.position.copy(snapTarget);
+      this.camera.lookAt(this.player.mesh.position);
+    
+      // 4. consume the keystroke so it runs only once
+      this.input['KeyC'] = false;
     }
+    
 
     // Position the camera based on follow mode.
     if (this.cameraFollow && this.player.mesh) {
-      // Follow mode: camera's position is offset from the player's position.
-      this.camera.position.set(
-        this.player.mesh.position.x + this.cameraDistance * Math.cos(this.cameraAngle),
-        this.player.mesh.position.y + this.cameraHeight,
-        this.player.mesh.position.z + this.cameraDistance * Math.sin(this.cameraAngle)
+      // // Follow mode: camera's position is offset from the player's position.
+      // this.camera.position.set(
+      //   this.player.mesh.position.x + this.cameraDistance * Math.cos(this.cameraAngle),
+      //   this.player.mesh.position.y + this.cameraHeight,
+      //   this.player.mesh.position.z + this.cameraDistance * Math.sin(this.cameraAngle)
+      // );
+      // this.camera.lookAt(this.player.mesh.position);
+
+      /*------------------------------------------------------------
+        Spring-damper camera smoothing
+        x  = camera.position          (current state)
+        xₜ = target                   (where we’d like the camera to be)
+        v  = this.cameraVel           (velocity we integrate each frame)
+    
+        a = –k(x‒xₜ) – c v            (Hooke’s law + damping)
+        v += a Δt
+        x += v Δt
+      ------------------------------------------------------------*/
+    
+      // 1) where should the camera eventually sit?
+      const target = this.player.mesh.position.clone().add(
+        new THREE.Vector3(
+          this.cameraDistance * Math.cos(this.cameraAngle),
+          this.cameraHeight,
+          this.cameraDistance * Math.sin(this.cameraAngle)
+        )
       );
+    
+      // 2) spring parameters (tweak to taste)
+      const k = 12;    // stiffness  (how aggressively it pulls)
+      const c = 8;     // damping    (how much it resists oscillation)
+    
+      // 3) acceleration = spring + damping
+      const camAcc = target.clone().sub(this.camera.position).multiplyScalar(k)
+                      .add(this.cameraVel.clone().multiplyScalar(-c));
+    
+      // 4) semi-implicit Euler integrate
+      this.cameraVel.addScaledVector(camAcc, delta);       // v ← v + aΔt
+      this.camera.position.addScaledVector(this.cameraVel, delta); // x ← x + vΔt
+    
+      // 5) always look at the player
       this.camera.lookAt(this.player.mesh.position);
     } else {
-      // Fixed mode: camera stays relative to the origin.
-      this.camera.position.set(
-        this.cameraDistance * Math.cos(this.cameraAngle),
-        this.cameraHeight,
-        this.cameraDistance * Math.sin(this.cameraAngle)
-      );
-      this.camera.lookAt(new THREE.Vector3(0, 0, 0));
+        // Fixed mode: orbit around the saved centre
+        this.camera.position.set(
+          this.fixedCameraCenter.x + this.cameraDistance * Math.cos(this.cameraAngle),
+          this.fixedCameraCenter.y + this.cameraHeight,
+          this.fixedCameraCenter.z + this.cameraDistance * Math.sin(this.cameraAngle)
+        );
+     this.camera.lookAt(this.fixedCameraCenter);
     }
-
+    
     if (this.attackVelocityBuffActive) {
       this.attackVelocityBuffTimer -= delta;
       if (this.attackVelocityBuffTimer <= 0) {
