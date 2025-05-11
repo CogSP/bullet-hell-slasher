@@ -88,6 +88,31 @@ export class UI {
     this.powerupLabel.style.display = "none";
     document.body.appendChild(this.powerupLabel);
 
+    /* turret palette ---------------------------------------------------- */
+  this.palette = document.createElement('div');
+  this.palette.style.position = 'absolute';
+  this.palette.style.top  = '50%';
+  this.palette.style.left = '10px';
+  this.palette.style.transform = 'translateY(-50%)';
+  this.palette.style.display = 'flex';
+  this.palette.style.flexDirection = 'column';
+  this.palette.style.gap  = '12px';
+  document.body.appendChild(this.palette);
+
+  /* one button for now */
+  this.turretBtn = document.createElement('img');
+  this.turretBtn.src = 'assets/textures/laser/laserBlue01.png'; // icon
+  this.turretBtn.style.width  = '48px';
+  this.turretBtn.style.height = '48px';
+  this.turretBtn.style.cursor = 'grab';
+  this.palette.appendChild(this.turretBtn);
+
+  this.turretBtn.addEventListener('pointerdown', e => {
+    if (this.onStartTurretDrag) this.onStartTurretDrag(e);
+  });
+
+
+
     // --- Bottom HUD ---
     this.bottomHUD = document.createElement("div");
     this.bottomHUD.style.position = "absolute";

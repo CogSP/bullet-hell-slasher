@@ -14,7 +14,6 @@ export class Game {
     // Create the scene and set a background color.
     this.scene = new THREE.Scene();
     this.scene.background = new THREE.Color(0x202020);
-    
 
     // // Load a ground texture using TextureLoader
     // const textureLoader = new THREE.TextureLoader();
@@ -82,7 +81,9 @@ export class Game {
 
     // Setup camera.
     const aspect = container.clientWidth / container.clientHeight;
+    
     const viewSize = 100; // Adjust this value to zoom in/out
+    
     
     // Calculate orthographic parameters
     const left = -viewSize * aspect / 2;
@@ -95,7 +96,7 @@ export class Game {
     
     // Position the camera for an isometric view.
     // A common setup is to rotate 45° around Y and 35.264° (arctan(1/√2)) above the horizontal.
-    this.camera.position.set(20, 20, 20); 
+    this.camera.position.set(40, 40, 40); 
     this.camera.lookAt(new THREE.Vector3(0, 0, 0));
     
     // --- New: Store initial camera state ---
@@ -124,6 +125,8 @@ export class Game {
     this.clock = new THREE.Clock();
 
     this.pickups = [];
+
+    this.turrets = [];
 
     // Create the player.
     this.player = new Player(this.scene);
@@ -249,6 +252,47 @@ export class Game {
     });
     window.addEventListener('keyup', (event) => {
       this.input[event.code] = false;
+    });
+
+    let draggingTurret = null;
+
+    this.ui.onStartTurretDrag = () => {
+      draggingTurret = { img: this.ui.turretBtn.cloneNode(), pos: new THREE.Vector2() };
+      draggingTurret.img.style.position = 'absolute';
+      draggingTurret.img.style.pointerEvents = 'none';
+      draggingTurret.img.style.opacity = '0.7';
+      document.body.appendChild(draggingTurret.img);
+    };
+
+    window.addEventListener('pointermove', e => {
+      if (!draggingTurret) return;
+      draggingTurret.pos.set(e.clientX, e.clientY);
+      draggingTurret.img.style.left = `${e.clientX - 24}px`;
+      draggingTurret.img.style.top  = `${e.clientY - 24}px`;
+    });
+
+    window.addEventListener('pointerup', async e => {
+      if (!draggingTurret) return;
+
+      /* convert screen → world (ground plane) */
+      const rect = this.renderer.domElement.getBoundingClientRect();
+      const ndc  = new THREE.Vector2(
+        ((e.clientX - rect.left) / rect.width ) * 2 - 1,
+        (-(e.clientY - rect.top)  / rect.height) * 2 + 1
+      );
+      const ray = new THREE.Raycaster();
+      ray.setFromCamera(ndc, this.camera);
+      const plane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
+      const hit   = new THREE.Vector3();
+      if (ray.ray.intersectPlane(plane, hit)) {
+        /* spawn turret */
+        const Turret = (await import('./Turret.js')).Turret; // dynamic to avoid circular deps
+        const t = new Turret(hit, this.scene, this.enemySpawner);
+        this.turrets.push(t);
+      }
+
+      document.body.removeChild(draggingTurret.img);
+      draggingTurret = null;
     });
 
 
@@ -423,7 +467,7 @@ export class Game {
 
     if (intersectionPoint) {
       const direction = intersectionPoint.sub(this.player.mesh.position).normalize();
-      const bullet = new Bullet(this.player.mesh.position.clone(), direction);
+      const bullet = new Bullet(this.player.mesh.position.clone(), direction, this.scene);
       // Add the player's current velocity to the bullet.
       bullet.velocity.add(this.player.velocity);
       // Apply buff: increase bullet speed if the buff is active.
@@ -535,7 +579,7 @@ export class Game {
         for (let i = 0; i < bulletHellBulletCount; i++) {
           const angle = i * (2 * Math.PI / bulletHellBulletCount);
           const direction = new THREE.Vector3(Math.cos(angle), 0, Math.sin(angle));
-          const bullet = new Bullet(this.player.mesh.position.clone(), direction);
+          const bullet = new Bullet(this.player.mesh.position.clone(), direction, this.scene);
           // Inherit the player's velocity.
           bullet.velocity.add(this.player.velocity);
           // Multiply the bullet speed.
@@ -566,7 +610,7 @@ export class Game {
         for (let i = 0; i < ultraBulletCount; i++) {
           const angle = i * (2 * Math.PI / ultraBulletCount);
           const direction = new THREE.Vector3(Math.cos(angle), 0, Math.sin(angle));
-          const bullet = new Bullet(this.player.mesh.position.clone(), direction);
+          const bullet = new Bullet(this.player.mesh.position.clone(), direction, this.scene);
           bullet.velocity.add(this.player.velocity);
           bullet.velocity.multiplyScalar(ultraBulletSpeedMultiplier);
           bullet.mesh.scale.set(2, 2, 2);
@@ -592,7 +636,7 @@ export class Game {
         for (let i = 0; i < megaBulletCount; i++) {
           const angle = i * (2 * Math.PI / megaBulletCount);
           const direction = new THREE.Vector3(Math.cos(angle), 0, Math.sin(angle));
-          const bullet = new Bullet(this.player.mesh.position.clone(), direction);
+          const bullet = new Bullet(this.player.mesh.position.clone(), direction, this.scene);
           bullet.velocity.add(this.player.velocity);
           bullet.velocity.multiplyScalar(megaBulletSpeedMultiplier);
           this.bullets.push(bullet);
@@ -613,7 +657,7 @@ export class Game {
         for (let i = 0; i < bulletCount; i++) {
           const angle = i * (2 * Math.PI / bulletCount);
           const direction = new THREE.Vector3(Math.cos(angle), 0, Math.sin(angle));
-          const bullet = new Bullet(this.player.mesh.position.clone(), direction);
+          const bullet = new Bullet(this.player.mesh.position.clone(), direction, this.scene);
           bullet.velocity.add(this.player.velocity);
           this.bullets.push(bullet);
           this.scene.add(bullet.mesh);
@@ -790,6 +834,9 @@ export class Game {
     }
 
     this.ui.updatePowerupBar(powerupPercentage, powerupLabel);
+
+    // update turrets
+    for (const t of this.turrets) t.update(delta);
 
 
     // Render the scene.
