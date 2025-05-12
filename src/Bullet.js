@@ -35,7 +35,7 @@ export class Bullet {
   constructor(pos, dir, scene, {
     speed        = 60, // this will influence the damage
     mass         = 0.05,
-    heightOffset = 1.2
+    heightOffset = 4
   } = {}) {
 
     /*―― basic physics ――*/

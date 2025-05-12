@@ -1,45 +1,52 @@
 import * as THREE from 'three';
+import { GLTFLoader } from 'https://cdn.jsdelivr.net/npm/three@0.150.1/examples/jsm/loaders/GLTFLoader.js';
 import { Bullet } from './Bullet.js';
 
 export class Turret {
-  /**
-   * @param {THREE.Vector3} pos    world-space position where the base sits
-   * @param {THREE.Scene}   scene
-   * @param {EnemySpawner}  spawner – to query enemies
-   */
-  constructor(pos, scene, spawner) {
-    /* ── tuning ───────────────────────────────────────────── */
-    this.fireRate   = 2;          // rps  (shots / second)
-    this.range      = 25;         // m
-    this.turnSpeed  = 4;          // rad s-1
-
-    /* ── simple geometry (base + barrel) ─────────────────── */
-    const baseGeo  = new THREE.CylinderGeometry(0.8, 0.8, 0.6, 12);
-    const barrelGeo = new THREE.CylinderGeometry(0.15, 0.15, 1.6, 8);
-    const mat      = new THREE.MeshStandardMaterial({ color: 0x555555 });
-    this.base      = new THREE.Mesh(baseGeo, mat);
-    this.barrel    = new THREE.Mesh(barrelGeo, mat);
-
-    // pivot barrel so Z+ is forward
-    this.barrel.rotation.z = Math.PI * 0.5;
-    this.barrel.position.y = 0.6;          // atop the base
-    this.barrel.position.z = 0.8;
-
-    this.object = new THREE.Group();
-    this.object.add(this.base);
-    this.object.add(this.barrel);
+  constructor(pos, scene, spawner, bulletArray) {
+    this.fireRate   = 2;   // shots/sec
+    this.range      = 250;  // firing radius
+    this.turnSpeed  = 4;   // radians/sec
+    this.cooldown   = 0;
+    this.bulletArray = bulletArray;
+    this.scene    = scene;
+    this.spawner  = spawner;
+    this.object   = new THREE.Group();  // will hold the loaded GLTF mesh
     this.object.position.copy(pos);
-    scene.add(this.object);
+    this.scene.add(this.object);
 
-    /* ── bookkeeping ───────────────────────────────────────── */
-    this.scene     = scene;
-    this.spawner   = spawner;
-    this.cooldown  = 0;   // seconds until next shot
+    // Load the GLTF turret model
+    const loader = new GLTFLoader();
+    loader.load('assets/turret/scene.gltf', gltf => {
+      const model = gltf.scene;
+
+      // OPTIONAL: scale and rotate to fit your world
+      model.scale.set(1, 1, 1);
+      model.rotation.y = Math.PI + 60;
+      
+      /* 1. lift model so it rests on the ground ----------------------- */
+      const box = new THREE.Box3().setFromObject(model);
+      const heightBelowOrigin = box.min.y;   // negative
+      model.position.y -= heightBelowOrigin; // now sits on y = 0
+
+      /* 2. create a muzzle helper ------------------------------------- */
+      // Pick a position relative to the model.  Here we take the
+      // current bounding box and place the muzzle a bit forward (+Z)
+      // and centred in X, Y.
+      const muzzle = new THREE.Object3D();
+      const yMid = (box.max.y + box.min.y) * 0.5;      // halfway up
+      const zFront = box.max.z + 0.2;                  // 20 cm in front
+      muzzle.position.set(0, yMid, zFront);
+      model.add(muzzle);
+      this.muzzle = muzzle;
+      
+      /* add model last ------------------------------------------------- */
+      this.object.add(model);
+    });
   }
 
-  /** call every frame */
   update(dt) {
-    /* find the closest enemy in range */
+    // Find closest enemy
     let closest = null;
     let closestDistSq = this.range * this.range;
 
@@ -50,20 +57,20 @@ export class Turret {
         closestDistSq = dSq;
       }
     }
+
     if (!closest) {
       this.cooldown = Math.max(0, this.cooldown - dt);
-      return;                    // no target in range
+      return;
     }
 
-    /* rotate barrel towards target */
+    // Aim at enemy (XZ plane only)
     const toTarget = closest.mesh.position.clone()
                        .sub(this.object.position)
-                       .setY(0)                    // keep flat
+                       .setY(0)
                        .normalize();
 
-    const currentDir = new THREE.Vector3(0, 0, 1) // barrel’s local +Z
+    const currentDir = new THREE.Vector3(0, 0, 1)
                          .applyQuaternion(this.object.quaternion);
-
     const angle = currentDir.angleTo(toTarget);
     const maxStep = this.turnSpeed * dt;
 
@@ -75,14 +82,15 @@ export class Turret {
       );
     }
 
-    /* fire if aimed & cooldown expired */
+    // Fire
     this.cooldown -= dt;
     if (angle < 0.15 && this.cooldown <= 0) {
-      const muzzle = new THREE.Vector3(0, 0.6, 1.1) // front of barrel
+      const muzzle = new THREE.Vector3(0, 1.5, 2.5)  // offset from base
                        .applyMatrix4(this.object.matrixWorld);
-      const dir    = toTarget;         // already unit length
+      const dir = toTarget;
 
-      new Bullet(muzzle, dir, this.scene);   // speed defaults to 60
+      const bullet = new Bullet(muzzle, dir, this.scene);
+      this.bulletArray.push(bullet)
       this.cooldown = 1 / this.fireRate;
     }
   }

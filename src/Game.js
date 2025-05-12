@@ -5,6 +5,7 @@ import { EnemySpawner } from './EnemySpawner.js';
 import { UI } from './UI.js';
 import { Bullet } from './Bullet.js';
 import { HeartPickup } from './HeartPickup.js';
+import { Turret } from './Turret.js';
 
 
 export class Game {
@@ -254,46 +255,50 @@ export class Game {
       this.input[event.code] = false;
     });
 
+    /* ---------------- drag-and-drop turret ---------------- */
     let draggingTurret = null;
 
     this.ui.onStartTurretDrag = () => {
-      draggingTurret = { img: this.ui.turretBtn.cloneNode(), pos: new THREE.Vector2() };
-      draggingTurret.img.style.position = 'absolute';
-      draggingTurret.img.style.pointerEvents = 'none';
-      draggingTurret.img.style.opacity = '0.7';
+      draggingTurret = {
+        img : this.ui.turretBtn.cloneNode(),
+        pos : new THREE.Vector2()
+      };
+      draggingTurret.img.style.cssText = `
+          position:absolute; width:48px; height:48px; opacity:.7;
+          pointer-events:none; transform:translate(-24px, -24px);`;
       document.body.appendChild(draggingTurret.img);
     };
 
     window.addEventListener('pointermove', e => {
       if (!draggingTurret) return;
-      draggingTurret.pos.set(e.clientX, e.clientY);
-      draggingTurret.img.style.left = `${e.clientX - 24}px`;
-      draggingTurret.img.style.top  = `${e.clientY - 24}px`;
+      draggingTurret.img.style.left = `${e.clientX}px`;
+      draggingTurret.img.style.top  = `${e.clientY}px`;
     });
 
-    window.addEventListener('pointerup', async e => {
+    window.addEventListener('pointerup', e => {
       if (!draggingTurret) return;
 
-      /* convert screen → world (ground plane) */
+      /* screen-space → world-space on the X-Z ground-plane (y = 0) */
       const rect = this.renderer.domElement.getBoundingClientRect();
       const ndc  = new THREE.Vector2(
-        ((e.clientX - rect.left) / rect.width ) * 2 - 1,
-        (-(e.clientY - rect.top)  / rect.height) * 2 + 1
+        ((e.clientX - rect.left) / rect.width)  * 2 - 1,
+        ((e.clientY - rect.top ) / rect.height) *-2 + 1          // note sign!
       );
       const ray = new THREE.Raycaster();
       ray.setFromCamera(ndc, this.camera);
-      const plane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
-      const hit   = new THREE.Vector3();
-      if (ray.ray.intersectPlane(plane, hit)) {
-        /* spawn turret */
-        const Turret = (await import('./Turret.js')).Turret; // dynamic to avoid circular deps
-        const t = new Turret(hit, this.scene, this.enemySpawner);
-        this.turrets.push(t);
+
+      const ground = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0); // y = 0
+      const hit = new THREE.Vector3();
+      if (ray.ray.intersectPlane(ground, hit)) {
+        const turret = new Turret(hit, this.scene, this.enemySpawner, this.bullets);
+        this.turrets.push(turret);
       }
 
       document.body.removeChild(draggingTurret.img);
       draggingTurret = null;
     });
+    /* ------------------------------------------------------ */
+
 
 
     this.ui.onToggleCameraFollow = () => {
