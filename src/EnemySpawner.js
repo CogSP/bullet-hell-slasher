@@ -1,7 +1,7 @@
 import { Enemy } from './Enemy.js';
 
 export class EnemySpawner {
-  constructor(scene, player) {
+  constructor(scene, player, game) {
     this.scene = scene;
     this.player = player;
     this.enemies = [];
@@ -15,6 +15,7 @@ export class EnemySpawner {
     this.spawnInterval = 1.0;
     //this.spawnInterval = 0.5 // testing
     this.spawnTimer = 0;
+    this.game = game;
 
     this.waveInProgress = true;
     this.nextWaveDelay = 5;
@@ -63,6 +64,8 @@ export class EnemySpawner {
     if (this.player?.game?.ui?.showMessage) {
       this.player.game.ui.showMessage(`Wave ${this.currentWave} incoming!`, 2);
     }
+
+    this.game.addTurretToken(2);
   }
 
   removeEnemy(enemy) {

@@ -88,28 +88,71 @@ export class UI {
     this.powerupLabel.style.display = "none";
     document.body.appendChild(this.powerupLabel);
 
+    /* 0------------ Global CSS for the turret button (once per page) */
+    if (!document.getElementById('turret-btn-style')) {
+      const style = document.createElement('style');
+      style.id = 'turret-btn-style';
+      style.textContent = `
+        .turret-btn{
+          width:48px;           /* keeps hit-target the same size      */
+          aspect-ratio:1;
+          cursor:grab;
+          transition:filter .15s,transform .1s;
+          filter:drop-shadow(0 0 4px #0f0);           /* base glow      */
+        }
+        .turret-btn:hover  { filter:drop-shadow(0 0 8px #4f4); }        /* brighter */
+        .turret-btn:active { transform:scale(.93); cursor:grabbing; }   /* tap feel */
+      `;
+      document.head.appendChild(style);
+    }
+
     /* turret palette ---------------------------------------------------- */
-  this.palette = document.createElement('div');
-  this.palette.style.position = 'absolute';
-  this.palette.style.top  = '50%';
-  this.palette.style.left = '10px';
-  this.palette.style.transform = 'translateY(-50%)';
-  this.palette.style.display = 'flex';
-  this.palette.style.flexDirection = 'column';
-  this.palette.style.gap  = '12px';
-  document.body.appendChild(this.palette);
+    this.palette = document.createElement('div');
+    this.palette.style.position = 'absolute';
+    this.palette.style.top  = '50%';
+    this.palette.style.left = '10px';
+    this.palette.style.transform = 'translateY(-50%)';
+    this.palette.style.display = 'flex';
+    this.palette.style.flexDirection = 'column';
+    this.palette.style.gap  = '12px';
+    document.body.appendChild(this.palette);
 
-  /* one button for now */
-  this.turretBtn = document.createElement('img');
-  this.turretBtn.src = 'assets/textures/laser/laserBlue01.png'; // icon
-  this.turretBtn.style.width  = '48px';
-  this.turretBtn.style.height = '48px';
-  this.turretBtn.style.cursor = 'grab';
-  this.palette.appendChild(this.turretBtn);
 
-  this.turretBtn.addEventListener('pointerdown', e => {
-    if (this.onStartTurretDrag) this.onStartTurretDrag(e);
-  });
+    /* one button for now */
+    this.turretBtn = document.createElement('img');
+    this.turretBtn.src = 'assets/ui/turret.svg';   // <-- drop your SVG/PNG here
+    this.turretBtn.alt = 'Place Turret';
+    this.turretBtn.classList.add('turret-btn');    // picks up the CSS above
+    this.palette.appendChild(this.turretBtn);
+
+    this.turretBtn.addEventListener('pointerdown', e => {
+      if (parseInt(this.turretBadge.innerText) > 0) {
+        if (this.onStartTurretDrag) this.onStartTurretDrag(e);
+      } else {
+        /* tiny feedback if empty */
+        this.turretBtn.style.transform = 'scale(.9)';
+        setTimeout(()=>this.turretBtn.style.transform='',100);
+      }
+    });
+
+    // UI.js – inside constructor, right after you build this.turretBtn
+    this.turretBadge = document.createElement('span');
+    this.turretBadge.style.cssText = `
+      position:absolute; right:-4px; bottom:-4px;
+      background:#222; color:#0f0; font:12px/16px Arial,sans-serif;
+      border:1px solid #0f0; border-radius:50%; width:20px; height:20px;
+      display:flex; align-items:center; justify-content:center;
+      pointer-events:none;
+    `;
+    this.turretBadge.innerText = '0';
+    this.turretBtn.style.position = 'relative';   // anchor for badge
+    this.turretBtn.appendChild(this.turretBadge);
+
+    /* expose an updater */
+    this.updateTurretCount = (n) => {
+      this.turretBadge.innerText = n;
+      this.turretBtn.style.opacity = n > 0 ? '1' : '0.35'; // grey-out if none
+    };
 
 
 
@@ -228,9 +271,12 @@ export class UI {
     this.hudRight.innerHTML = rightText;
   }
 
-  update(health, score, wave = null) {
-    this.uiContainer.innerHTML = `Health: ${health} <br> Score: ${score}` +
-      (wave ? `<br>Wave: ${wave}` : "");
+  // fourth param is optional so existing calls won’t break
+  update(health, score, wave = null, turretTokens = null) {
+    this.uiContainer.innerHTML =
+      `Health: ${health} <br>Score: ${score}` +
+      (wave   !== null ? `<br>Wave: ${wave}`         : "") +
+      (turretTokens !== null ? `<br>Turrets: ${turretTokens}` : "");
   }
 
   showMessage(text, duration = 3) {

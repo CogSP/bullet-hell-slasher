@@ -85,11 +85,11 @@ export class Turret {
     // Fire
     this.cooldown -= dt;
     if (angle < 0.15 && this.cooldown <= 0) {
-      const muzzle = new THREE.Vector3(0, 1.5, 2.5)  // offset from base
-                       .applyMatrix4(this.object.matrixWorld);
-      const dir = toTarget;
 
-      const bullet = new Bullet(muzzle, dir, this.scene);
+      const muzzlePos = this.muzzle.getWorldPosition(new THREE.Vector3());
+      const muzzleDir = closest.mesh.position.clone().sub(muzzlePos).normalize();
+
+      const bullet = new Bullet(muzzlePos, muzzleDir, this.scene);
       this.bulletArray.push(bullet)
       this.cooldown = 1 / this.fireRate;
     }

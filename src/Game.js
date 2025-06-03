@@ -10,6 +10,10 @@ import { Turret } from './Turret.js';
 
 export class Game {
   constructor(container) {
+
+    this.draggingTurret   = null;   // { img, ghost } when user is dragging
+    this.turretPrefab     = null;   // loaded once, then cloned for the ghost
+
     this.container = container;
 
     // Create the scene and set a background color.
@@ -129,6 +133,8 @@ export class Game {
 
     this.turrets = [];
 
+    this.turretTokens = 0;          // how many the player can still place
+
     // Create the player.
     this.player = new Player(this.scene);
     this.player.game = this; // So player can access game and UI
@@ -178,13 +184,12 @@ export class Game {
       });
     };
     
-    
-
     // Enemy spawner to handle enemy creation.
-    this.enemySpawner = new EnemySpawner(this.scene, this.player);
+    this.enemySpawner = new EnemySpawner(this.scene, this.player, this);
 
     // UI overlay for health and score.
     this.ui = new UI();
+    this.ui.updateTurretCount(this.turretTokens);   // initial 0
     this.ui.camera = this.camera;
     
 
@@ -255,50 +260,97 @@ export class Game {
       this.input[event.code] = false;
     });
 
-    /* ---------------- drag-and-drop turret ---------------- */
-    let draggingTurret = null;
 
+    /* ---------- DRAG-TO-PLACE TURRET ---------------------------------- */
     this.ui.onStartTurretDrag = () => {
-      draggingTurret = {
-        img : this.ui.turretBtn.cloneNode(),
-        pos : new THREE.Vector2()
-      };
-      draggingTurret.img.style.cssText = `
-          position:absolute; width:48px; height:48px; opacity:.7;
-          pointer-events:none; transform:translate(-24px, -24px);`;
-      document.body.appendChild(draggingTurret.img);
+      if (this.turretTokens <= 0) {
+        return;
+      }
+      /* 1. create the little icon that follows the cursor (UI only) */
+      const img = this.ui.turretBtn.cloneNode();
+      img.style.cssText = `
+        position:absolute; width:48px; height:48px; opacity:.7;
+        pointer-events:none; transform:translate(-24px,-24px);`;
+      document.body.appendChild(img);
+
+      /* 2. create / clone a translucent green “ghost” in 3-D */
+      let ghost;
+      if (this.turretPrefab) {
+        ghost = this.turretPrefab.clone(true);
+        ghost.traverse(o => {
+          if (o.isMesh) {
+            o.material = o.material.clone();
+            o.material.color.set(0x00ff00);
+            o.material.opacity = 0.5;
+            o.material.transparent = true;
+            o.material.depthWrite = false;
+          }
+        });
+      } else {
+        /* fallback: simple cylinder if the model hasn’t loaded yet */
+        ghost = new THREE.Mesh(
+          new THREE.CylinderGeometry(1.5, 1.5, 2, 24),
+          new THREE.MeshBasicMaterial({ color:0x00ff00, opacity:0.5, transparent:true })
+        );
+      }
+      this.scene.add(ghost);
+
+      this.draggingTurret = { img, ghost };
     };
 
     window.addEventListener('pointermove', e => {
-      if (!draggingTurret) return;
-      draggingTurret.img.style.left = `${e.clientX}px`;
-      draggingTurret.img.style.top  = `${e.clientY}px`;
-    });
+      if (!this.draggingTurret) return;
 
-    window.addEventListener('pointerup', e => {
-      if (!draggingTurret) return;
+      /* move UI icon */
+      this.draggingTurret.img.style.left = `${e.clientX}px`;
+      this.draggingTurret.img.style.top  = `${e.clientY}px`;
 
-      /* screen-space → world-space on the X-Z ground-plane (y = 0) */
+      /* move 3-D ghost */
       const rect = this.renderer.domElement.getBoundingClientRect();
       const ndc  = new THREE.Vector2(
-        ((e.clientX - rect.left) / rect.width)  * 2 - 1,
-        ((e.clientY - rect.top ) / rect.height) *-2 + 1          // note sign!
+        ((e.clientX - rect.left) / rect.width ) * 2 - 1,
+        ((e.clientY - rect.top )  / rect.height) * -2 + 1
       );
       const ray = new THREE.Raycaster();
       ray.setFromCamera(ndc, this.camera);
 
-      const ground = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0); // y = 0
+      const ground = new THREE.Plane(new THREE.Vector3(0,1,0), 0);      // y = 0
       const hit = new THREE.Vector3();
       if (ray.ray.intersectPlane(ground, hit)) {
-        const turret = new Turret(hit, this.scene, this.enemySpawner, this.bullets);
+        /* optional grid-snap */
+        const grid = 2;  // size of your tiles
+        hit.set(
+          Math.round(hit.x / grid) * grid,
+          0,
+          Math.round(hit.z / grid) * grid
+        );
+        this.draggingTurret.ghost.position.copy(hit);
+      }
+    });
+
+    window.addEventListener('pointerup', e => {
+      if (!this.draggingTurret) return;
+
+      /* if the ghost is sitting on the ground, place a real turret there */
+      const pos = this.draggingTurret.ghost.position;
+      if (!isNaN(pos.x) && this.turretTokens > 0) {   // have a valid hit *and* a token
+        const turret = new Turret(
+          pos.clone(),
+          this.scene,
+          this.enemySpawner,
+          this.bullets
+        );
         this.turrets.push(turret);
+
+        this.addTurretToken(-1);              // 🔻 spend one token & refresh badge
       }
 
-      document.body.removeChild(draggingTurret.img);
-      draggingTurret = null;
+      /* clean up */
+      this.scene.remove(this.draggingTurret.ghost);
+      document.body.removeChild(this.draggingTurret.img);
+      this.draggingTurret = null;
     });
-    /* ------------------------------------------------------ */
-
+    /* --------------------------------------------------------------- */
 
 
     this.ui.onToggleCameraFollow = () => {
@@ -317,9 +369,17 @@ export class Game {
         this.player.mesh.position.clone()
       );
     };
-    
-
   }
+
+  // Game.js – just under the constructor
+  addTurretToken(count = 1, worldPos = null) {
+    this.turretTokens += count;
+    this.ui.updateTurretCount(this.turretTokens);
+
+    const pos = worldPos ?? this.player.mesh.position.clone();
+    this.ui.showFloatingMessage(`🛡️ +${count} Turret`, pos);
+  }
+
 
   registerEnemyKill(enemy) {
     const now = this.clock.elapsedTime;
@@ -381,13 +441,19 @@ export class Game {
 
 
     const dropChance = 0.2; // 20% chance to drop a heart
+    const turretChance = 0.05 // 5% chance to drop a turret token
     if (Math.random() < dropChance) {
       //console.log("💖 Spawning heart at", enemy.mesh.position);
       const heart = new HeartPickup(enemy.mesh.position.clone(), this.player);
       this.pickups.push(heart);
       this.scene.add(heart.mesh);
+
+      if (Math.random() < turretChance) {
+        this.addTurretToken(1, enemy.mesh.position);
+      }
     }
   }
+
 
   activateBulletHell() {
     this.bulletHellActive = true;
@@ -699,10 +765,12 @@ export class Game {
       }
     }
 
-    // Update the UI with current health and score.
-    this.ui.update(this.player.health, this.enemySpawner.score, this.enemySpawner.currentWave);
+   // Update the UI with health, score, wave *and* remaining turrets.
+    this.ui.update(this.player.health,
+                   this.enemySpawner.score,
+                   this.enemySpawner.currentWave,
+                   this.turretTokens);
     this.ui.updateStaminaBar((this.player.stamina / this.player.maxStamina) * 100);
-
 
     // Update camera based on input 
     const rotationSpeed = 1.0; // Radians per second
