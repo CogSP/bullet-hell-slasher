@@ -1,6 +1,6 @@
 // Molotov.js
 import * as THREE from 'three';
-import { getParticleSystem } from './getParticleSystem.js';
+import { getParticles } from './getParticles.js';
 
 export class Molotov {
     constructor (pos, scene, camera, game) {
@@ -30,12 +30,13 @@ export class Molotov {
         this.group.add(this.decal);
 
         /* fire sprites */
-        this.fire = getParticleSystem({
+        this.fire = getParticles({
             camera,
             emitter: this.decal,
             parent : this.group,
             rate   : 120,
-            texture: 'src/img/fire.png'
+            texture: 'src/img/fire.png',
+            mode: 'fire'
         });
     }
 

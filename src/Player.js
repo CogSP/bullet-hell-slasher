@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { GLTFLoader } from 'https://cdn.jsdelivr.net/npm/three@0.150.1/examples/jsm/loaders/GLTFLoader.js';
 import { AnimationUtils } from 'three';
-import { getParticleSystem } from './getParticleSystem.js';
+import { getParticles } from './getParticles.js';
 
 export class Player {
   constructor(scene, gameCamera) {
@@ -34,22 +34,19 @@ export class Player {
         this.mesh.scale.set(0.07, 0.07, 0.07);
         this.scene.add(this.mesh);
 
-        // this.flameAnchor = new THREE.Object3D();
-        // this.flameAnchor.position.set(0, 1.2, 0);   // tweak Y so it’s just above the ground
-        // this.mesh.add(this.flameAnchor);
+        this.smokeAnchor = new THREE.Object3D();
+        this.smokeAnchor.position.set(0, 1.2, 0);
+        this.mesh.add(this.smokeAnchor);
 
-        // this.fireEffect = getParticleSystem({
-        //   camera: this.gameCamera,   // we will pass the main camera in via the ctor
-        //   emitter: this.flameAnchor,   // the dummy child we just added
-        //   parent : this.scene,         // where Points() will live
-        //   rate   : 60,                 // particles / second
-        //   texture: 'src/img/fire.png',     // sprite sheet or plain PNG
-        // });
-
-        //Optional: start disabled
-        // this.fireEnabled = true;
-        // this.fireEffect.update(0);     // build the first empty geometry
-
+        this.smokeEffect = getParticles({
+          camera : this.gameCamera,
+          emitter: this.smokeAnchor,
+          parent : this.smokeAnchor,
+          rate   : 5,
+          texture: 'src/img/circle.png',
+          mode   : 'aura',
+        });
+        this.smokeEnabled = false;
 
         if (gltf.animations && gltf.animations.length > 0) {
           this.mixer = new THREE.AnimationMixer(this.mesh);
@@ -187,9 +184,9 @@ export class Player {
   
     // Buff glow
     this.setBuffEffect(knifeAttackSpeedMultiplier > 1);
-
-    if (this.fireEffect && this.fireEnabled) {
-      this.fireEffect.update(delta);
+  
+    if (this.smokeEffect && this.smokeEnabled) {
+      this.smokeEffect.update(delta);
     }
   }
   
@@ -210,6 +207,10 @@ export class Player {
         }
       }
     });
+
+    if (this.smokeEffect) {
+      this.smokeEnabled = enabled;
+    }
   }
 
   // Smooth crossfade between actions.
