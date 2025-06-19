@@ -35,13 +35,13 @@ export class Game {
     // // Optionally, improve texture quality at oblique angles
     // groundTexture.anisotropy = 16;
 
-    /* ---------- PBR cobblestone ground (Step-1) ---------- */
+    /* ---------- PBR cobblestone ground ---------- */
     const texLoader = new THREE.TextureLoader();
 
     const gColor  = texLoader.load('assets/ground/pbr/ground_albedo.jpg');
     const gNormal = texLoader.load('assets/ground/pbr/ground_normal.png');
     const gRough  = texLoader.load('assets/ground/pbr/ground_rough.jpg');
-    const gAO     = texLoader.load('assets/ground/pbr/ground_ao.png');   // if you have it
+    const gAO     = texLoader.load('assets/ground/pbr/ground_ao.png');
 
     // colour textures must be flagged as sRGB so lighting looks right
     gColor.colorSpace = THREE.SRGBColorSpace;
@@ -133,10 +133,13 @@ export class Game {
 
     this.turrets = [];
 
-    this.turretTokens = 0;          // how many the player can still place
+    this.turretTokens = 1900;          // how many the player can still place
+    this.molotovTokens = 1000;        // give player a few to start
+    this.molotovs      = [];       // active instances
+    this.draggingMolotov = null;   // {img, ghost}
 
     // Create the player.
-    this.player = new Player(this.scene);
+    this.player = new Player(this.scene, this.camera);
     this.player.game = this; // So player can access game and UI
 
     this.scene.add(this.player.mesh);
@@ -190,6 +193,7 @@ export class Game {
     // UI overlay for health and score.
     this.ui = new UI();
     this.ui.updateTurretCount(this.turretTokens);   // initial 0
+    this.ui.updateMolotovCount(this.molotovTokens); // initial 3
     this.ui.camera = this.camera;
     
 
@@ -353,6 +357,77 @@ export class Game {
     /* --------------------------------------------------------------- */
 
 
+    /* ---------- DRAG-TO-PLACE MOLOTOV -------------------------------- */
+    this.ui.onStartMolotovDrag = () => {
+      if (this.molotovTokens <= 0) return;
+
+      /* tiny cursor ghost – reuse turret icon style */
+      const img = this.ui.molotovBtn.cloneNode();
+      img.style.cssText = `
+          position:absolute;width:48px;height:48px;opacity:.8;
+          pointer-events:none;transform:translate(-24px,-24px);`;
+      document.body.appendChild(img);
+
+      /* 3-D ghost: just a red circle */
+      const ghost = new THREE.Mesh(
+          new THREE.CircleGeometry(4,32),
+          new THREE.MeshBasicMaterial({color:0xff3300,opacity:0.4,
+                                      transparent:true,depthWrite:false}));
+      ghost.rotation.x = -Math.PI/2;
+      this.scene.add(ghost);
+
+      this.draggingMolotov = {img,ghost};
+    };
+
+    /* pointermove identical to turret logic but writing into draggingMolotov */
+    window.addEventListener('pointermove',e=>{
+      if(!this.draggingMolotov) return;
+      const {img,ghost}=this.draggingMolotov;
+      img.style.left=`${e.clientX}px`; img.style.top=`${e.clientY}px`;
+
+      const rect=this.renderer.domElement.getBoundingClientRect();
+      const ndc=new THREE.Vector2(
+            ((e.clientX-rect.left)/rect.width)*2-1,
+            ((e.clientY-rect.top )/rect.height)*-2+1);
+      const ray=new THREE.Raycaster(); ray.setFromCamera(ndc,this.camera);
+      const ground=new THREE.Plane(new THREE.Vector3(0,1,0),0);
+      const hit=new THREE.Vector3();
+      if(ray.ray.intersectPlane(ground,hit)){
+          const grid=2;
+          hit.set(Math.round(hit.x/grid)*grid,0,
+                  Math.round(hit.z/grid)*grid);
+          ghost.position.copy(hit);
+      }
+    });
+
+    window.addEventListener('pointerup', async e => {
+
+      /* no drag in progress? */
+      if (!this.draggingMolotov) return;
+
+      /* unpack & remember where the ghost ended up ------------------ */
+      const { img, ghost } = this.draggingMolotov;
+      const dropPos = ghost.position.clone();   // store before we delete it!
+
+      /* --- 1.  IMMEDIATE CLEAN-UP ---------------------------------- */
+      this.scene.remove(ghost);                 // stop rendering
+      ghost.geometry.dispose();                 // free GPU memory
+      ghost.material.dispose();
+      document.body.removeChild(img);           // remove cursor icon
+      this.draggingMolotov = null;              // reset state
+
+      /* --- 2.  If we still have a token, spawn a Molotov ------------ */
+      if (this.molotovTokens > 0 && !isNaN(dropPos.x)) {
+        const { Molotov } = await import('./Molotov.js');
+        const m = new Molotov(dropPos, this.scene, this.camera, this);
+        this.molotovs.push(m);
+        this.addMolotovToken(-1);
+      }
+    });
+    /* ----------------------------------------------------------------- */
+
+
+
     this.ui.onToggleCameraFollow = () => {
       this.cameraFollow = !this.cameraFollow;
     
@@ -380,6 +455,12 @@ export class Game {
     this.ui.showFloatingMessage(`🛡️ +${count} Turret`, pos);
   }
 
+  addMolotovToken(count=1, worldPos=null){
+    this.molotovTokens += count;
+    this.ui.updateMolotovCount(this.molotovTokens);
+    const pos = worldPos ?? this.player.mesh.position.clone();
+    this.ui.showFloatingMessage(`🔥 +${count} Molotov`, pos);
+  }
 
   registerEnemyKill(enemy) {
     const now = this.clock.elapsedTime;
@@ -911,6 +992,15 @@ export class Game {
     // update turrets
     for (const t of this.turrets) t.update(delta);
 
+    /* update Molotovs */
+    for(let i=this.molotovs.length-1;i>=0;i--){
+      const m=this.molotovs[i];
+      m.enemies = this.enemySpawner.enemies;   // give live list each frame
+      const dead = m.update(delta);
+      if(dead){
+        this.molotovs.splice(i,1);
+      }
+    }
 
     // Render the scene.
     this.renderer.render(this.scene, this.camera);

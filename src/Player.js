@@ -1,10 +1,12 @@
 import * as THREE from 'three';
 import { GLTFLoader } from 'https://cdn.jsdelivr.net/npm/three@0.150.1/examples/jsm/loaders/GLTFLoader.js';
 import { AnimationUtils } from 'three';
+import { getParticleSystem } from './getParticleSystem.js';
 
 export class Player {
-  constructor(scene) {
+  constructor(scene, gameCamera) {
     this.scene = scene;
+    this.gameCamera = gameCamera; // Store the camera reference for particle effects.
     this.health = 100;
     this.speed = 10; // Movement speed.
     this.velocity = new THREE.Vector3(0, 0, 0);
@@ -31,6 +33,23 @@ export class Player {
         this.mesh.position.set(0, 1.5, 0);
         this.mesh.scale.set(0.07, 0.07, 0.07);
         this.scene.add(this.mesh);
+
+        // this.flameAnchor = new THREE.Object3D();
+        // this.flameAnchor.position.set(0, 1.2, 0);   // tweak Y so it’s just above the ground
+        // this.mesh.add(this.flameAnchor);
+
+        // this.fireEffect = getParticleSystem({
+        //   camera: this.gameCamera,   // we will pass the main camera in via the ctor
+        //   emitter: this.flameAnchor,   // the dummy child we just added
+        //   parent : this.scene,         // where Points() will live
+        //   rate   : 60,                 // particles / second
+        //   texture: 'src/img/fire.png',     // sprite sheet or plain PNG
+        // });
+
+        //Optional: start disabled
+        // this.fireEnabled = true;
+        // this.fireEffect.update(0);     // build the first empty geometry
+
 
         if (gltf.animations && gltf.animations.length > 0) {
           this.mixer = new THREE.AnimationMixer(this.mesh);
@@ -168,6 +187,10 @@ export class Player {
   
     // Buff glow
     this.setBuffEffect(knifeAttackSpeedMultiplier > 1);
+
+    if (this.fireEffect && this.fireEnabled) {
+      this.fireEffect.update(delta);
+    }
   }
   
  

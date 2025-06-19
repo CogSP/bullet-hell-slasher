@@ -66,6 +66,13 @@ export class EnemySpawner {
     }
 
     this.game.addTurretToken(2);
+
+    // with probability 8% add a Molotov
+    const molotovChance = 0.08;
+    if(Math.random()<molotovChance){
+      this.addMolotovToken(1, enemy.mesh.position);
+    }
+
   }
 
   removeEnemy(enemy) {

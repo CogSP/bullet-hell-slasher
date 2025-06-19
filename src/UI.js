@@ -1,5 +1,31 @@
 export class UI {
   constructor() {
+
+    /* ---------------------------------------------------------------
+        Single shared button stylesheet – only create it once
+    ---------------------------------------------------------------- */
+    if (!document.getElementById('ui-btn-style')) {
+      const style = document.createElement('style');
+      style.id = 'ui-btn-style';
+      style.textContent = `
+        /* generic behaviour for every palette button */
+        .ui-btn{
+          width:48px;                     /* square hit-target               */
+          aspect-ratio:1;
+          cursor:grab;
+          transition:filter .15s,transform .1s;
+        }
+        .ui-btn:hover  { filter:drop-shadow(0 0 8px var(--glow)); }
+        .ui-btn:active { transform:scale(.93); cursor:grabbing; }
+
+        /* individual colour tints ---------------------------------- */
+        .turret-btn  { --glow:#0f0; filter:drop-shadow(0 0 4px var(--glow)); }
+        .molotov-btn { --glow:#f60; filter:drop-shadow(0 0 4px var(--glow)); }
+      `;
+      document.head.appendChild(style);
+    }
+
+
     // Create a container for UI elements.
     this.uiContainer = document.createElement('div');
     this.uiContainer.style.position = 'absolute';
@@ -122,7 +148,7 @@ export class UI {
     this.turretBtn = document.createElement('img');
     this.turretBtn.src = 'assets/ui/turret.svg';   // <-- drop your SVG/PNG here
     this.turretBtn.alt = 'Place Turret';
-    this.turretBtn.classList.add('turret-btn');    // picks up the CSS above
+    this.turretBtn.classList.add('ui-btn', 'turret-btn');    // picks up the CSS above
     this.palette.appendChild(this.turretBtn);
 
     this.turretBtn.addEventListener('pointerdown', e => {
@@ -153,6 +179,33 @@ export class UI {
       this.turretBadge.innerText = n;
       this.turretBtn.style.opacity = n > 0 ? '1' : '0.35'; // grey-out if none
     };
+
+    /* after you finish building turretBtn/badge … add a second palette entry */
+    this.molotovBtn = document.createElement('img');
+    this.molotovBtn.src  = 'assets/ui/molotov_background_2.svg';    // supply any icon
+    this.molotovBtn.alt  = 'Throw Molotov';
+    this.molotovBtn.classList.add('ui-btn', 'molotov-btn');       // reuse same CSS
+    this.palette.appendChild(this.molotovBtn);
+      
+    this.molotovBadge = this.turretBadge.cloneNode();  // copy style
+    this.molotovBadge.innerText = '0';
+    this.molotovBtn.style.position = 'relative';
+    this.molotovBtn.appendChild(this.molotovBadge);
+      
+    this.updateMolotovCount = n => {
+      this.molotovBadge.innerText = n;
+      this.molotovBtn.style.opacity = n > 0 ? '1' : '0.35';
+    };
+    
+    /* drag-start callback hook */
+    this.molotovBtn.addEventListener('pointerdown', e=>{
+      if (parseInt(this.molotovBadge.innerText) > 0) {
+          if (this.onStartMolotovDrag) this.onStartMolotovDrag(e);
+      } else {
+          this.molotovBtn.style.transform='scale(.9)';
+          setTimeout(()=>this.molotovBtn.style.transform='',100);
+      }
+    });
 
 
 
