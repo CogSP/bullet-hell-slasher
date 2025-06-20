@@ -50,24 +50,27 @@ export class UI {
     this.messageDiv.style.display = 'none';
     document.body.appendChild(this.messageDiv);
 
-    // Create a container for the stamina bar
-    this.staminaBarContainer = document.createElement("div");
-    this.staminaBarContainer.style.position = "absolute";
-    this.staminaBarContainer.style.bottom = "35px"; // Slightly above bottom HUD
-    this.staminaBarContainer.style.left = "50%";
-    this.staminaBarContainer.style.transform = "translateX(-50%)";
-    this.staminaBarContainer.style.width = "300px";
-    this.staminaBarContainer.style.height = "16px";
-    this.staminaBarContainer.style.border = "2px solid white";
-    this.staminaBarContainer.style.background = "rgba(0, 0, 0, 0.5)";
-    document.body.appendChild(this.staminaBarContainer);
+    // Create a container for the mana bar
+    this.manaBarContainer = document.createElement("div");
+    this.manaBarContainer.style.position = "absolute";
+    this.manaBarContainer.style.bottom = "35px"; // Slightly above bottom HUD
+    this.manaBarContainer.style.left = "50%";
+    this.manaBarContainer.style.transform = "translateX(-50%)";
+    this.manaBarContainer.style.width = "300px";
+    this.manaBarContainer.style.height = "16px";
+    this.manaBarContainer.style.border = "2px solid white";
+    this.manaBarContainer.style.background = "rgba(0, 0, 0, 0.5)";
+    document.body.appendChild(this.manaBarContainer);
 
-    // Create the actual stamina bar
-    this.staminaBar = document.createElement("div");
-    this.staminaBar.style.height = "100%";
-    this.staminaBar.style.width = "100%";
-    this.staminaBar.style.background = "#00BFFF"; // DeepSkyBlue
-    this.staminaBarContainer.appendChild(this.staminaBar);
+    // Create the actual mana bar
+    this.manaBar = document.createElement("div");
+    this.manaBar.style.height = "100%";
+    this.manaBar.style.width = "100%";
+    this.manaBar.style.background = "#00BFFF"; // DeepSkyBlue
+    this.manaBarContainer.appendChild(this.manaBar);
+
+    this.manaBarContainer.style.display = 'none'; // for now, let's hide the old bottom-centre mana bar
+
 
 
     this.damageOverlay = document.createElement("div");
@@ -207,8 +210,6 @@ export class UI {
       }
     });
 
-
-
     // --- Bottom HUD ---
     this.bottomHUD = document.createElement("div");
     this.bottomHUD.style.position = "absolute";
@@ -229,7 +230,7 @@ export class UI {
 
     // Left HUD info
     this.hudLeft = document.createElement("div");
-    this.hudLeft.innerHTML = "🔪 Knife | 💥 Dummy";
+    // this.hudLeft.innerHTML = "🔪 Left Click = Knife | 1 = Turret | 2 = Molotov";
 
     // Right HUD info with tip and button
     this.hudRight = document.createElement("div");
@@ -262,6 +263,54 @@ export class UI {
         this.onToggleCameraFollow();
       }
     });
+
+    /* ───────── Floating bars above the player ───────── */
+    this.playerBars = document.createElement('div');
+    this.playerBars.style.cssText = `
+      position:absolute;              /* we will move it every frame      */
+      pointer-events:none;            /* clicks go through              */
+      transform:translate(-50%,-100%);/* center & sit just above point */
+      display:flex; align-items:center; gap:6px;   /* badge ─ bars row  */
+    `;                                  /* (↕ centre-vertically)          */
+    document.body.appendChild(this.playerBars);
+
+    /* LEVEL BADGE (always “1” for now) ■ */
+    this.levelBadge = document.createElement('div');
+    this.levelBadge.style.cssText = `
+        width:22px; height:22px; border-radius:50%;
+        background:#222; border:1px solid #fff; color:#fff;
+        font:12px/22px Arial,sans-serif; text-align:center;
+    `;
+    this.levelBadge.textContent = '1';
+    this.playerBars.appendChild(this.levelBadge);
+
+    /* ➊ a column wrapper that will hold the two bars */
+    this.barsColumn = document.createElement('div');
+    this.barsColumn.style.cssText = `
+        display:flex; flex-direction:column; gap:2px;
+    `;
+ 
+
+    /* — HEALTH — */
+    this.healthBack = document.createElement('div');
+    this.healthBack.style.cssText =
+      'width:80px;height:8px;background:rgba(0,0,0,.6);border:1px solid #fff';
+    this.healthBar = document.createElement('div');
+    this.healthBar.style.cssText =
+      'height:100%;width:100%;background:#25c025';     /* green */
+    this.healthBack.appendChild(this.healthBar);
+    this.barsColumn.appendChild(this.healthBack);
+
+    /* — MANA — */
+    this.manaBack = document.createElement('div');
+    this.manaBack.style.cssText =
+      'width:80px;height:2px;margin-top:1px;background:rgba(0,0,0,.6);border:1px solid #fff';
+    this.manaBar  = document.createElement('div');
+    this.manaBar.style.cssText =
+      'height:100%;width:100%;background:#00BFFF';     /* blue */
+    this.manaBack.appendChild(this.manaBar);
+    this.barsColumn.appendChild(this.manaBack);
+    this.playerBars.appendChild(this.barsColumn);
   }
 
   showFloatingMessage(text, worldPosition) {
@@ -353,18 +402,35 @@ export class UI {
     }
   }
 
-  updateStaminaBar(percentage) {
-    this.staminaBar.style.width = `${Math.max(0, Math.min(percentage, 100))}%`;
+  updateManaBar(percentage) {
+    this.manaBar.style.width = `${Math.max(0, Math.min(percentage, 100))}%`;
 
     // Optionally change color based on level
     if (percentage > 50) {
-      this.staminaBar.style.background = "#00BFFF"; // Normal (DeepSkyBlue)
+      this.manaBar.style.background = "#00BFFF"; // Normal (DeepSkyBlue)
     } else if (percentage > 20) {
-      this.staminaBar.style.background = "#FFD700"; // Warning (Gold)
+      this.manaBar.style.background = "#FFD700"; // Warning (Gold)
     } else {
-      this.staminaBar.style.background = "#FF4500"; // Low (OrangeRed)
+      this.manaBar.style.background = "#FF4500"; // Low (OrangeRed)
     }
   }
+
+  
+  /**
+   * Re-positions the bar group over `worldPos`
+   * and updates fill levels.
+   * @param {THREE.Vector3} worldPos – point above the player’s head
+   * @param {number} healthPct        – 0-100
+   * @param {number} manaPct          – 0-100
+   */
+  updatePlayerBars(worldPos, healthPct, manaPct) {
+    if (!this.camera) return;
+    const p = this.worldToScreen(worldPos);
+    this.playerBars.style.left = `${p.x}px`;
+    this.playerBars.style.top  = `${p.y}px`;
+    this.healthBar.style.width = `${Math.max(0, Math.min(healthPct,100))}%`;
+    this.manaBar .style.width  = `${Math.max(0, Math.min(manaPct ,100))}%`;
+  };
 
   flashDamageOverlay() {
     this.damageOverlay.style.opacity = 1;

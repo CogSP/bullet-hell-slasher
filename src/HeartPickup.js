@@ -1,8 +1,10 @@
 import * as THREE from 'three';
+import { getParticles } from './getParticles.js';
 
 export class HeartPickup {
   constructor(position, player) {
     this.player = player;
+    this.camera = player.gameCamera;
     this.radius = 1; // pickup radius
     this.magnetRange = 40;     // Distance to start flying toward the player
     this.healAmount = 20;
@@ -26,7 +28,36 @@ export class HeartPickup {
     this.mesh = new THREE.Mesh(geometry, material);
     this.mesh.position.copy(position);
     this.mesh.position.y += 1.5; // Hover slightly
+
+    this.auraAnchor = new THREE.Object3D();
+    this.auraAnchor.position.set(0, 0.6, 0); // centre the ring on the heart
+    this.mesh.add(this.auraAnchor);
+
+    this.aura = getParticles({
+      camera : this.camera,
+      emitter: this.auraAnchor,
+      parent : this.auraAnchor,
+      rate   : 500,                     
+      texture: 'src/img/circle.png',
+      mode   : 'aura',
+      bodyRadius: 0.4,
+      bodyHeight: 0.8,
+    });
   }
+
+  /** stop the particle system and free GPU memory */
+  destroy(scene) {
+    // remove every sprite that was spawned
+    if (this.aura && this.aura.parent) {
+      this.aura.parent.remove(...this.aura.parent.children);
+    }
+    // if your helper exposes a dispose() call, uncomment:
+    // if (this.aura?.dispose) this.aura.dispose();
+
+    // finally yank the anchor / heart from the scene
+    scene.remove(this.mesh);
+  }
+
 
   update(delta) {
     this.bobTime += delta;
@@ -36,6 +67,8 @@ export class HeartPickup {
 
     // Glowing pulsing effect
     this.material.emissiveIntensity = Math.sin(this.bobTime * 4) * 0.3 + 0.7;
+
+    if (this.aura) this.aura.update(delta);
 
     // Pickup collision
     const dist = this.mesh.position.distanceTo(this.player.mesh.position);

@@ -5,6 +5,7 @@ import { EnemySpawner } from './EnemySpawner.js';
 import { UI } from './UI.js';
 import { Bullet } from './Bullet.js';
 import { HeartPickup } from './HeartPickup.js';
+import { Minimap } from './Minimap.js';
 import { Turret } from './Turret.js';
 
 
@@ -196,6 +197,8 @@ export class Game {
     this.ui.updateMolotovCount(this.molotovTokens); // initial 3
     this.ui.camera = this.camera;
     
+    /* ------ Minimap -------------------------------------------------- */
+    this.minimap = new Minimap(1000 /* ground size */, 160 /* px */);
 
     // Array to hold active bullets.
     this.bullets = [];
@@ -256,9 +259,44 @@ export class Game {
     // Listen for mouse clicks to shoot.
     this.container.addEventListener('click', (event) => this.onMouseClick(event));
 
+    this.container.addEventListener('mousedown', (event) => {
+      if (event.button === 0) { // Left click
+        if (this.draggintTurret || this.draggingMolotov) return; // Don't attack while dragging
+        this.input['MouseLeft'] = true;
+      }
+    });
+    this.container.addEventListener('mouseup', (event) => {
+      if (event.button === 0) {
+        this.input['MouseLeft'] = false;
+      }
+    });
+
+    window.addEventListener('mousemove', e => {
+      this.lastMouseX = e.clientX;
+      this.lastMouseY = e.clientY;
+    });
+
     // Listen for keydown and keyup events.
     window.addEventListener('keydown', (event) => {
       this.input[event.code] = true;
+
+      // Spells: 1 = turret, 2 = molotov (you can expand to 3, 4 later)
+      switch (event.code) {
+        case 'Digit1':
+          this.ui.onStartTurretDrag?.();
+          this.simulatePointerMoveAtMouse(); // trigger ghost placement
+          break;
+        case 'Digit2':
+          this.ui.onStartMolotovDrag?.();
+          this.simulatePointerMoveAtMouse();
+          break;
+        case 'Digit3':
+          // Placeholder for spell 3
+          break;
+        case 'Digit4':
+          // Placeholder for spell 4
+          break;
+      }
     });
     window.addEventListener('keyup', (event) => {
       this.input[event.code] = false;
@@ -337,7 +375,9 @@ export class Game {
 
       /* if the ghost is sitting on the ground, place a real turret there */
       const pos = this.draggingTurret.ghost.position;
-      if (!isNaN(pos.x) && this.turretTokens > 0) {   // have a valid hit *and* a token
+      // if (!isNaN(pos.x) && this.turretTokens > 0) {   // have a valid hit *and* a token
+      const turretCost = 50;
+      if (!isNaN(pos.x) && this.player.spendMana(turretCost)) {
         const turret = new Turret(
           pos.clone(),
           this.scene,
@@ -416,8 +456,10 @@ export class Game {
       document.body.removeChild(img);           // remove cursor icon
       this.draggingMolotov = null;              // reset state
 
-      /* --- 2.  If we still have a token, spawn a Molotov ------------ */
-      if (this.molotovTokens > 0 && !isNaN(dropPos.x)) {
+      // /* --- 2.  If we still have a token, spawn a Molotov ------------ */
+      // if (this.molotovTokens > 0 && !isNaN(dropPos.x)) {
+      const molotovCost = 50;
+      if (!isNaN(dropPos.x) && this.player.spendMana(molotovCost)) {
         const { Molotov } = await import('./Molotov.js');
         const m = new Molotov(dropPos, this.scene, this.camera, this);
         this.molotovs.push(m);
@@ -444,6 +486,14 @@ export class Game {
         this.player.mesh.position.clone()
       );
     };
+  }
+
+  simulatePointerMoveAtMouse() {
+    const evt = new PointerEvent('pointermove', {
+      clientX: this.lastMouseX ?? window.innerWidth / 2,
+      clientY: this.lastMouseY ?? window.innerHeight / 2
+    });
+    window.dispatchEvent(evt);
   }
 
   // Game.js – just under the constructor
@@ -602,6 +652,7 @@ export class Game {
   
   onMouseClick(event) {
     // Calculate normalized device coordinates (NDC)
+    if (this.draggingTurret || this.draggingMolotov) return; // Don't shoot while dragging
     const rect = this.renderer.domElement.getBoundingClientRect();
     const mouse = new THREE.Vector2(
       ((event.clientX - rect.left) / rect.width) * 2 - 1,
@@ -638,6 +689,11 @@ export class Game {
   animate() {
     requestAnimationFrame(() => this.animate());
     const delta = this.clock.getDelta();
+
+    /* ─── wait until the player mesh has been loaded ─── */
+    if (!this.player.mesh) {          // still null? → skip logic this frame
+      return;
+    }
 
     // Determine the base knife attack multiplier from the first powerup.
     const baseKnifeSpeedMultiplier = this.attackVelocityBuffActive ? this.attackVelocityBuffMultiplier : 1;
@@ -828,6 +884,7 @@ export class Game {
       const collected = heart.update(delta);
       if (collected) {
         this.scene.remove(heart.mesh);
+        heart.destroy(this.scene);
         this.pickups.splice(i, 1);
         this.ui.showFloatingMessage("+20 HP 💖", this.player.mesh.position.clone());
       }      
@@ -851,7 +908,7 @@ export class Game {
                    this.enemySpawner.score,
                    this.enemySpawner.currentWave,
                    this.turretTokens);
-    this.ui.updateStaminaBar((this.player.stamina / this.player.maxStamina) * 100);
+    // this.ui.updateStaminaBar((this.player.stamina / this.player.maxStamina) * 100);
 
     // Update camera based on input 
     const rotationSpeed = 1.0; // Radians per second
@@ -1001,6 +1058,23 @@ export class Game {
         this.molotovs.splice(i,1);
       }
     }
+
+    this.player.regenMana(delta);
+    this.ui.updateManaBar((this.player.mana / this.player.maxMana) * 100);
+
+    const headPos = this.player.mesh.position.clone().add(new THREE.Vector3(0, 15, 0));
+    this.ui.updatePlayerBars(
+      headPos,
+      this.player.health,
+      (this.player.mana / this.player.maxMana) * 100
+    );
+
+    this.minimap.update(
+      this.player,
+      this.enemySpawner.enemies,
+      this.pickups,
+      this.cameraAngle
+    );
 
     // Render the scene.
     this.renderer.render(this.scene, this.camera);

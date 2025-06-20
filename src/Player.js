@@ -19,10 +19,12 @@ export class Player {
     // Callback to be set by Game for handling knife damage.
     this.onKnifeHit = null;
     this.maxStamina = 100;
-    this.stamina = this.maxStamina;
-    this.staminaRegenRate = 15;     // Stamina per second when not running
-    this.staminaDrainRate = 25;     // Stamina per second while running
-    this.canRun = true;             // Flag to prevent running when stamina is depleted
+    this.maxMana = 100;
+    this.mana = this.maxMana;
+    // this.stamina = this.maxStamina;
+    // this.staminaRegenRate = 15;     // Stamina per second when not running
+    // this.staminaDrainRate = 25;     // Stamina per second while running
+    // this.canRun = true;             // Flag to prevent running when stamina is depleted
 
 
     const loader = new GLTFLoader();
@@ -34,19 +36,29 @@ export class Player {
         this.mesh.scale.set(0.07, 0.07, 0.07);
         this.scene.add(this.mesh);
 
-        this.smokeAnchor = new THREE.Object3D();
-        this.smokeAnchor.position.set(0, 1.2, 0);
-        this.mesh.add(this.smokeAnchor);
+        this.auraAnchor = new THREE.Object3D();
+        this.auraAnchor.position.set(0, 1.2, 0);
+        this.mesh.add(this.auraAnchor);
 
-        this.smokeEffect = getParticles({
+        this.auraEffect = getParticles({
           camera : this.gameCamera,
-          emitter: this.smokeAnchor,
-          parent : this.smokeAnchor,
-          rate   : 5,
+          emitter: this.auraAnchor,
+          parent : this.auraAnchor,
+          rate   : 50,
           texture: 'src/img/circle.png',
-          mode   : 'aura',
+          mode   : 'aura', // this is the preset
+          bodyRadius: 30,
+          bodyHeight: 350,
+
+          // overrides
+          maxSize: 0.03,
+          radius: 0.5,
+          colour: [
+            [0, new THREE.Color(0xffff00)],
+            [1, new THREE.Color(0xffff00)],
+          ]
         });
-        this.smokeEnabled = false;
+        this.auraEnabled = false;
 
         if (gltf.animations && gltf.animations.length > 0) {
           this.mixer = new THREE.AnimationMixer(this.mesh);
@@ -102,16 +114,38 @@ export class Player {
     );
   }
 
+  spendMana(amount) {
+    if (this.mana >= amount) {
+      this.mana -= amount;
+      return true;
+    }
+
+    // not enough – tell the user once per click
+    if (this.game && this.game.ui) {
+      this.game.ui.showFloatingMessage(
+        "Not enough mana!",
+        this.mesh ? this.mesh.position.clone() : new THREE.Vector3()
+      );
+    }
+
+    return false;
+  }
+
+  regenMana(delta, rate = 10) {
+    this.mana += rate * delta;
+    if (this.mana > this.maxMana) this.mana = this.maxMana;
+  }
+
   update(delta, input, cameraAngle, knifeAttackSpeedMultiplier) {
     if (this.mixer) this.mixer.update(delta);
     if (!this.mesh) return;
   
     // Handle knife attack
-    if (input['KeyK'] && this.actions.knife && !this.isAttacking) {
+    if (input['MouseLeft'] && this.actions.knife && !this.isAttacking) {
       this.fadeToAction('knife');
       this.actions.knife.timeScale = knifeAttackSpeedMultiplier;
       this.isAttacking = true;
-      input['KeyK'] = false;
+      input['MouseLeft'] = false;
       console.log('Knife attack triggered with multiplier:', knifeAttackSpeedMultiplier);
       return;
     }
@@ -130,29 +164,44 @@ export class Player {
     moveDir.addScaledVector(cameraForward, forwardInput);
     moveDir.addScaledVector(cameraRight, rightInput);
   
-    const isTryingToRun = input['ShiftLeft'] && this.canRun;
-    let currentSpeed = this.speed;
+
+    // commented since I decided to always run. The stamina bar is converted in a mana bar for turrets/molotovs.
+
+    // const isTryingToRun = input['ShiftLeft'] && this.canRun;
+    // let currentSpeed = this.speed;
   
-    if (moveDir.length() > 0) {
-      moveDir.normalize();
+    // if (moveDir.length() > 0) {
+    //   moveDir.normalize();
   
-      if (!this.isAttacking) {
-        if (isTryingToRun && this.actions.run) {
-          this.fadeToAction('run');
-          currentSpeed *= 1.8;
-          this.actions.run.timeScale = 1;
+    //   if (!this.isAttacking) {
+    //     if (isTryingToRun && this.actions.run) {
+    //       this.fadeToAction('run');
+    //       currentSpeed *= 1.8;
+    //       this.actions.run.timeScale = 1;
   
-          // Drain stamina while running
-          this.stamina -= this.staminaDrainRate * delta;
-          if (this.stamina <= 0) {
-            this.stamina = 0;
-            this.canRun = false;
+    //       // Drain stamina while running
+    //       this.stamina -= this.staminaDrainRate * delta;
+    //       if (this.stamina <= 0) {
+    //         this.stamina = 0;
+    //         this.canRun = false;
+    //       }
+    //     } else if (this.actions.walk) {
+    //       this.fadeToAction('walk');
+    //       this.actions.run.timeScale = 1;
+    //     }
+    //   }
+
+      let currentSpeed = this.speed * 1.8; // Always run
+
+      if (moveDir.length() > 0) {
+        moveDir.normalize();
+
+        if (!this.isAttacking) {
+          if (this.actions.run) {
+            this.fadeToAction('run');
+            this.actions.run.timeScale = 1;
           }
-        } else if (this.actions.walk) {
-          this.fadeToAction('walk');
-          this.actions.run.timeScale = 1;
         }
-      }
   
       this.velocity.copy(moveDir).multiplyScalar(currentSpeed);
       const movement = moveDir.clone().multiplyScalar(currentSpeed * delta);
@@ -168,13 +217,13 @@ export class Player {
       }
     }
   
-    if (!isTryingToRun) {
-      this.stamina += this.staminaRegenRate * delta;
-      if (this.stamina >= this.maxStamina) {
-        this.stamina = this.maxStamina;
-        this.canRun = true;
-      }
-    }
+    // if (!isTryingToRun) {
+    //   this.stamina += this.staminaRegenRate * delta;
+    //   if (this.stamina >= this.maxStamina) {
+    //     this.stamina = this.maxStamina;
+    //     this.canRun = true;
+    //   }
+    // }
   
     // Knife damage logic
     if (this.activeAction === this.actions.knife && !this.knifeDamageApplied) {
@@ -185,8 +234,8 @@ export class Player {
     // Buff glow
     this.setBuffEffect(knifeAttackSpeedMultiplier > 1);
   
-    if (this.smokeEffect && this.smokeEnabled) {
-      this.smokeEffect.update(delta);
+    if (this.auraEffect && this.auraEnabled) {
+      this.auraEffect.update(delta);
     }
   }
   
@@ -208,8 +257,8 @@ export class Player {
       }
     });
 
-    if (this.smokeEffect) {
-      this.smokeEnabled = enabled;
+    if (this.auraEffect) {
+      this.auraEnabled = enabled;
     }
   }
 
