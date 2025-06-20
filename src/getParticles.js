@@ -318,11 +318,12 @@ function getParticles(params){
     aura :{
         tex : texture ?? 'src/img/circle.png',
         //blend:THREE.AdditiveBlending,
-        radius:0.6, maxLife:0.8, maxSize:0.25, maxVelocity:0.5,
+        radius:0.6, maxLife:0.8, maxSize:0.018, maxVelocity:0.5,
         alpha:[ [0,0],[0.2,0.9],[1,0] ],
         colour:[ [0,new THREE.Color(0x44d7ff)],
                 [1,new THREE.Color(0xffffff)] ],
-        size:[ [0,0.6],[1,2.2] ],
+        // size stays constant (no growth
+        size:[ [0,1],[1,1] ],
         velocity : function (dir){
             const v = this.maxVelocity;
             return new THREE.Vector3(
@@ -374,19 +375,52 @@ function getParticles(params){
     acc+=dt; 
     const n=Math.floor(acc*rate); 
     acc-=n/rate;
+
+    // TODO: to tweak until it looks good
+    const BODY_RADIUS = 60; 
+    const BODY_HEIGHT = 300;
+    //
+
     for(let i=0;i<n;i++){
+      
       const life = (Math.random()*0.75+0.25)*PRESET.maxLife;
-      /* random dir in XZ for ring-spawn (used by aura, ignored by others) */
-      const dir=new THREE.Vector3(Math.random()*2-1,0,Math.random()*2-1).normalize();
-      const p=new THREE.Vector3().copy(dir)
-                   .multiplyScalar(PRESET.radius*(0.3+0.7*Math.random()));
-      p.y += (Math.random()-0.5)*0.4;
-      p.add(emitter.position);
+
+      // initialize pos and dir
+      let pos, dir;
+
+      if (mode === "fire") {
+        dir=new THREE.Vector3(Math.random()*2-1,0,Math.random()*2-1).normalize();
+        pos=new THREE.Vector3().copy(dir)
+                    .multiplyScalar(PRESET.radius*(0.3+0.7*Math.random()));
+        pos.y += (Math.random()-0.5)*0.4;
+        pos.add(emitter.position);
+      }
+
+      else if (mode === "aura") {
+        // ───── NEW: pick a random point inside the cylinder ───────────────
+        pos = new THREE.Vector3(
+            (Math.random()*2 - 1) * BODY_RADIUS,          // x ∈ [-R, R]
+            (Math.random()      ) * BODY_HEIGHT - BODY_HEIGHT * 0.5, // y ∈ [-H/2, H/2]
+            (Math.random()*2 - 1) * BODY_RADIUS           // z ∈ [-R, R]
+        );
+
+        // move from local to world space (anchor is at chest-height)
+        pos.add(emitter.getWorldPosition(new THREE.Vector3()));
+
+        // velocity points outward from the player’s centre so the orbs “fly off”
+        dir = pos.clone().sub(emitter.getWorldPosition(new THREE.Vector3()))
+                          .normalize();
+      }
 
       pool.push({
-        position:p, size:(Math.random()*0.5+0.5)*PRESET.maxSize,
-        colour:new THREE.Color(), alpha:1, life, maxLife:life,
-        rotation:Math.random()*Math.PI*2, rotationRate:Math.random()*0.01-0.005,
+        position:pos, 
+        size:(Math.random()*0.5+0.5)*PRESET.maxSize,
+        colour:new THREE.Color(), 
+        alpha:1.0, 
+        life, 
+        maxLife:life,
+        rotation:Math.random()*Math.PI*2, 
+        rotationRate:Math.random()*0.01-0.005,
         velocity:(mode==="fire")?PRESET.velocity()
                 :(mode==="aura")?PRESET.velocity(dir):PRESET.velocity()
       });
