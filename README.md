@@ -1,6 +1,6 @@
-# A Three.js Top-Down Horde Game
+# A Three.js Rogue Like Game
 
-This project is a browser-based, single-player action game created for the "Interactive Graphics" (Sapienza University of Rome, a.y. 2025-2026) in Three.js.
+This project is a browser-based, single-player rogue-like game created for the "Interactive Graphics" (Sapienza University of Rome, a.y. 2025-2026) in Three.js.
 You fight waves of goblin using your knife, tools and powerup, trying to survive as long as you can. The project is built with vanilla **Three.js** ES-modules—no frameworks, no build step—just clone, serve, and play.
 
 <p align="center">
