@@ -11,7 +11,7 @@ function drawPlayerArrow(ctx, cx, cy, vx, vy, colour = '#0f0') {
     if (mag < 1e-5) return;
 
     // Angle in canvas space  (note: canvas Y-axis points down)
-    const ang = Math.atan2(-vy, -vx);
+    const ang = Math.atan2(-vx, vy);
 
     ctx.save();
     ctx.translate(cx, cy);
@@ -20,7 +20,7 @@ function drawPlayerArrow(ctx, cx, cy, vx, vy, colour = '#0f0') {
 
     // simple isosceles triangle (tip at top)
     ctx.beginPath();
-    ctx.moveTo(  0, -9);   // tip higher
+    ctx.moveTo(0, -9);   // tip higher
     ctx.lineTo(-6,  6);    // wider base
     ctx.lineTo( 6,  6);
     ctx.closePath();
@@ -80,8 +80,10 @@ export class Minimap {
     const cy = this.sizePx * 0.5;
 
     /* rotation matrix: world->map, so that camera-forward is "up" */
-    const cosA = Math.cos(-cameraAngle); // negative = rotate opposite camera
-    const sinA = Math.sin(-cameraAngle);
+    const rot   = - cameraAngle - Math.PI * 0.5;   // extra −90° (forward → up)
+
+    const cosA  = Math.cos(rot);
+    const sinA  = Math.sin(rot);
 
     const scale = this.sizePx / this.worldSize;   // px per world unit
 
@@ -93,7 +95,7 @@ export class Minimap {
         const rx = dx * cosA - dz * sinA;
         const rz = dx * sinA + dz * cosA;
 
-        const px = cx + rx * scale;
+        const px = cx - rx * scale;
         const py = cy - rz * scale; // minus: +z (forward) is up
 
         g.fillStyle = colour;

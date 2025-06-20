@@ -86,36 +86,171 @@ export class UI {
     document.body.appendChild(this.damageOverlay);
     
 
-    // Create a container for the powerup bar.
-    this.powerupBarContainer = document.createElement("div");
-    this.powerupBarContainer.style.position = "absolute";
-    this.powerupBarContainer.style.bottom = "60px";
-    this.powerupBarContainer.style.left = "50%";
-    this.powerupBarContainer.style.transform = "translateX(-50%)";
-    this.powerupBarContainer.style.width = "300px";
-    this.powerupBarContainer.style.height = "20px";
-    this.powerupBarContainer.style.border = "2px solid white";
-    this.powerupBarContainer.style.background = "rgba(0, 0, 0, 0.5)";
-    this.powerupBarContainer.style.display = "none";
-    document.body.appendChild(this.powerupBarContainer);
+    // // Create a container for the powerup bar.
+    // this.powerupBarContainer = document.createElement("div");
+    // this.powerupBarContainer.style.position = "absolute";
+    // this.powerupBarContainer.style.bottom = "60px";
+    // this.powerupBarContainer.style.left = "50%";
+    // this.powerupBarContainer.style.transform = "translateX(-50%)";
+    // this.powerupBarContainer.style.width = "300px";
+    // this.powerupBarContainer.style.height = "20px";
+    // this.powerupBarContainer.style.border = "2px solid white";
+    // this.powerupBarContainer.style.background = "rgba(0, 0, 0, 0.5)";
+    // this.powerupBarContainer.style.display = "none";
+    // document.body.appendChild(this.powerupBarContainer);
 
-    // Create the actual powerup bar.
-    this.powerupBar = document.createElement("div");
-    this.powerupBar.style.height = "100%";
-    this.powerupBar.style.width = "0%";
-    this.powerupBar.style.background = "lime";
-    this.powerupBarContainer.appendChild(this.powerupBar);
+    // // Create the actual powerup bar.
+    // this.powerupBar = document.createElement("div");
+    // this.powerupBar.style.height = "100%";
+    // this.powerupBar.style.width = "0%";
+    // this.powerupBar.style.background = "lime";
+    // this.powerupBarContainer.appendChild(this.powerupBar);
 
-    // Create a label to show the powerup name.
-    this.powerupLabel = document.createElement("div");
-    this.powerupLabel.style.position = "absolute";
-    this.powerupLabel.style.bottom = "85px";
-    this.powerupLabel.style.left = "50%";
-    this.powerupLabel.style.transform = "translateX(-50%)";
-    this.powerupLabel.style.color = "white";
-    this.powerupLabel.style.fontSize = "20px";
-    this.powerupLabel.style.display = "none";
-    document.body.appendChild(this.powerupLabel);
+    // // Create a label to show the powerup name.
+    // this.powerupLabel = document.createElement("div");
+    // this.powerupLabel.style.position = "absolute";
+    // this.powerupLabel.style.bottom = "85px";
+    // this.powerupLabel.style.left = "50%";
+    // this.powerupLabel.style.transform = "translateX(-50%)";
+    // this.powerupLabel.style.color = "white";
+    // this.powerupLabel.style.fontSize = "20px";
+    // this.powerupLabel.style.display = "none";
+    // document.body.appendChild(this.powerupLabel);
+
+    if (!document.getElementById('centre-hud-style')) {
+      const style = document.createElement('style');
+      style.id = 'centre-hud-style';
+      style.textContent = `
+        /* —— global HUD palette —— */
+        :root{
+          --hud-bg:       rgba(15,15,20,.75);
+          --hud-border:   #ffffff40;
+          --hp-grad:        #25c025;
+          --mp-grad:      #00BFFF;
+        }
+
+        /* —— centre container —— */
+        .centre-hud{
+          position:absolute; bottom:62px; left:50%; translate:-50% 0;
+          display:flex; align-items:center; gap:16px;
+          padding:6px 10px; border:1px solid var(--hud-border);
+          border-radius:12px; background:var(--hud-bg);
+          backdrop-filter:blur(8px);            /* subtle glass */
+          pointer-events:none;
+          transition:opacity .3s;
+        }
+
+        /* —— avatar —— */
+        .centre-hud .avatar{
+          width:56px; aspect-ratio:1; position:relative;
+          border-radius:50%; overflow:hidden;
+          box-shadow:0 0 6px 2px #000c;
+        }
+        .centre-hud .avatar img{width:100%;height:100%;object-fit:cover;}
+
+        .centre-hud .level-ring{
+          position:absolute; bottom:-2px; right:-2px;
+          width:22px; aspect-ratio:1; border-radius:50%;
+          font:12px/22px Arial,Helvetica,sans-serif; text-align:center;
+          color:#fff; background:#191919; border:1px solid #fff;
+          box-shadow:0 0 4px 1px #000c inset;
+        }
+
+        /* —— bar column —— */
+        .centre-hud .bars{display:flex; flex-direction:column; gap:4px;}
+
+        .centre-hud .bar-back{
+          width:140px; height:12px; border:1px solid var(--hud-border);
+          border-radius:6px; overflow:hidden; background:#0008;
+        }
+        .centre-hud .hp-fill   {height:100%; background:var(--hp-grad);}
+        .centre-hud .mp-fill   {height:100%; background:var(--mp-grad);}
+
+        /* —— spell icon —— */
+        .centre-hud .spell{
+          width:46px; aspect-ratio:1; object-fit:contain;
+          filter:drop-shadow(0 0 4px #0008);
+          transition:transform .15s;
+        }
+        .centre-hud .spell.low-mana{animation:pulse 1s infinite alternate;}
+        @keyframes pulse{from{transform:scale(1)}to{transform:scale(.9)}}
+      `;
+      document.head.appendChild(style);
+    }
+
+    /* ╭──────────────── centre HUD ────────────────╮ */
+    this.centerHUD = document.createElement('div');
+    this.centerHUD.className = 'centre-hud';
+    document.body.appendChild(this.centerHUD);
+
+    /* avatar + level */
+    const avatarWrap = document.createElement('div');
+    avatarWrap.className = 'avatar';
+    this.centerHUD.appendChild(avatarWrap);
+
+    this.avatarImg = document.createElement('img');
+    //this.avatarImg.src = 'src/img/rad-grad.png';
+    avatarWrap.appendChild(this.avatarImg);
+
+    this.setAvatar = (src)=>{     
+      this.avatarImg.src = src; 
+      console.log('Avatar image set to:', src);
+    };
+
+
+    this.levelRing = document.createElement('div');
+    this.levelRing.className = 'level-ring';
+    this.levelRing.textContent = '1';
+    avatarWrap.appendChild(this.levelRing);
+
+    /* bars */
+    const bars = document.createElement('div');
+    bars.className = 'bars';
+    this.centerHUD.appendChild(bars);
+
+    const hpBack = document.createElement('div');
+    hpBack.className = 'bar-back';
+    this.hpFill = document.createElement('div');
+    this.hpFill.className = 'hp-fill';
+    hpBack.appendChild(this.hpFill);
+    bars.appendChild(hpBack);
+
+    const mpBack = document.createElement('div');
+    mpBack.className = 'bar-back';
+    mpBack.style.height = '6px';                      // thinner mana bar
+    this.mpFill = document.createElement('div');
+    this.mpFill.className = 'mp-fill';
+    mpBack.appendChild(this.mpFill);
+    bars.appendChild(mpBack);
+
+    /* spell icon */
+    this.spellImg = document.createElement('img');
+    this.spellImg.className = 'spell';
+    this.spellImg.src = 'assets/ui/turret.svg';
+    this.centerHUD.appendChild(this.spellImg);
+
+    /**
+     * @param {number} hp   0-100
+     * @param {number} mp   0-100
+     * @param {string?} spellSrc optional new icon path
+     */
+    this.updateCenterHUD = (hp, mp, spellSrc = null) => {
+      this.hpFill.style.width = `${Math.max(0,Math.min(hp,100))}%`;
+      this.mpFill.style.width = `${Math.max(0,Math.min(mp,100))}%`;
+
+      /* low-mana visual cue */
+      if (mp < 20)  this.spellImg.classList.add('low-mana');
+      else          this.spellImg.classList.remove('low-mana');
+
+      /* swap spell icon if requested */
+      if (spellSrc) this.spellImg.src = spellSrc;
+    };
+
+
+    /* finally hide the old power-up widgets */
+    // this.powerupBarContainer.style.display = 'none';
+    // this.powerupLabel.style.display       = 'none';
+
 
     /* 0------------ Global CSS for the turret button (once per page) */
     if (!document.getElementById('turret-btn-style')) {
@@ -164,7 +299,6 @@ export class UI {
       }
     });
 
-    // UI.js – inside constructor, right after you build this.turretBtn
     this.turretBadge = document.createElement('span');
     this.turretBadge.style.cssText = `
       position:absolute; right:-4px; bottom:-4px;

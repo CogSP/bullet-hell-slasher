@@ -9,7 +9,63 @@ import { Minimap } from './Minimap.js';
 import { Turret } from './Turret.js';
 
 
+async function createPortrait() {
+
+  /* 1 — load the GLTF model ----------------------------------------- */
+  const gltf = await new GLTFLoader().loadAsync(
+    'assets/player/low_poly_soldier/scene.gltf'
+  );
+
+  const model = gltf.scene;
+
+  model.scale.set(0.07, 0.07, 0.07);          // keep whatever scale you need
+  
+
+  /* 2 — tiny off-screen renderer ------------------------------------ */
+  const rtt = new THREE.WebGLRenderer({ alpha:true, preserveDrawingBuffer:true });
+  rtt.outputColorSpace = THREE.SRGBColorSpace;
+  rtt.setSize(256,256);
+  rtt.setClearColor(0x0d0f3a, 1);                   // transparent navy
+
+  /* 3 — scene + lights ---------------------------------------------- */
+  const scene = new THREE.Scene();
+  scene.add(model);
+  scene.add(new THREE.HemisphereLight(0xffffff,0x444444,1.2));
+  scene.add(new THREE.DirectionalLight(0xffffff,0.8).position.set(0.4,1,0.6));
+
+  /* 4 — frame the head ---------------------------------------------- */
+  scene.updateMatrixWorld(true);
+  const box   = new THREE.Box3().setFromObject(model);
+  // DEBUG Visual helper – adds a green wireframe box around what the algorithm thinks the model is
+  const helper = new THREE.Box3Helper(box, 0x00ff00);
+  scene.add(helper);
+
+  const size  = box.getSize(new THREE.Vector3());
+  const cen   = box.getCenter(new THREE.Vector3());
+  model.position.sub(cen);
+  const fov   = 100; // 35 originally
+  const cam   = new THREE.PerspectiveCamera(fov,1,0.01,20);
+  const dist  = Math.max(size.x,size.y)*0.4 /
+                Math.tan(THREE.MathUtils.degToRad(fov*0.5));
+  // cam.position.copy(cen).add(new THREE.Vector3(0,0,dist));
+  // cam.lookAt(cen);
+  cam.position.set(0, 0, dist);    // look from +Z toward origin
+  cam.lookAt(0, 0, 0);
+
+
+  /* 5 — render & return --------------------------------------------- */
+  rtt.render(scene,cam);
+  
+  const ret = rtt.domElement.toDataURL('image/png')
+  
+  console.log('Portrait created:', ret);
+
+  return ret;
+}
+
+
 export class Game {
+  
   constructor(container) {
 
     this.draggingTurret   = null;   // { img, ghost } when user is dragging
@@ -87,6 +143,7 @@ export class Game {
 
     // Setup camera.
     const aspect = container.clientWidth / container.clientHeight;
+
     
     const viewSize = 100; // Adjust this value to zoom in/out
     
@@ -142,8 +199,9 @@ export class Game {
     // Create the player.
     this.player = new Player(this.scene, this.camera);
     this.player.game = this; // So player can access game and UI
-
+        
     this.scene.add(this.player.mesh);
+
 
     // Set up a callback so that when the player’s knife attack reaches its hit moment,
     // we check for nearby enemies and apply damage.
@@ -197,6 +255,10 @@ export class Game {
     this.ui.updateMolotovCount(this.molotovTokens); // initial 3
     this.ui.camera = this.camera;
     
+    createPortrait()
+        .then(png => this.ui.setAvatar(png))
+        .catch(err => console.error('portrait error', err));
+
     /* ------ Minimap -------------------------------------------------- */
     this.minimap = new Minimap(1000 /* ground size */, 160 /* px */);
 
@@ -1044,7 +1106,8 @@ export class Game {
       powerupLabel = "";
     }
 
-    this.ui.updatePowerupBar(powerupPercentage, powerupLabel);
+    // this.ui.updatePowerupBar(powerupPercentage, powerupLabel);
+    
 
     // update turrets
     for (const t of this.turrets) t.update(delta);
@@ -1068,6 +1131,12 @@ export class Game {
       this.player.health,
       (this.player.mana / this.player.maxMana) * 100
     );
+
+    this.ui.updateCenterHUD(
+        this.player.health,
+        (this.player.mana / this.player.maxMana) * 100,
+        null                                               // ⇢ pass a URL if
+    );                                                     //    you switch spells
 
     this.minimap.update(
       this.player,

@@ -31,7 +31,7 @@ export class Player {
     loader.load(
       'assets/player/low_poly_soldier/scene.gltf',
       (gltf) => {
-        this.mesh = gltf.scene;
+        this.mesh = gltf.scene;             
         this.mesh.position.set(0, 1.5, 0);
         this.mesh.scale.set(0.07, 0.07, 0.07);
         this.scene.add(this.mesh);
