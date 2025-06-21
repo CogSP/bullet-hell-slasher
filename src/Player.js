@@ -34,6 +34,8 @@ export class Player {
         this.mesh = gltf.scene;             
         this.mesh.position.set(0, 1.5, 0);
         this.mesh.scale.set(0.07, 0.07, 0.07);
+        this.mesh.castShadow = true; // TODO: check why this is not working: it should allow player to receive shadows
+
         this.scene.add(this.mesh);
 
         this.auraAnchor = new THREE.Object3D();
@@ -259,6 +261,10 @@ export class Player {
 
     if (this.auraEffect) {
       this.auraEnabled = enabled;
+      this.auraAnchor.visible = enabled;
+      if (!enabled && this.auraEffect.geometry) {
+        this.auraEffect.geometry.setDrawRange(0, 0);
+      }
     }
   }
 

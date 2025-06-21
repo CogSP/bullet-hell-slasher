@@ -9,59 +9,89 @@ import { Minimap } from './Minimap.js';
 import { Turret } from './Turret.js';
 
 
-async function createPortrait() {
+// async function createPortrait() {
 
-  /* 1 — load the GLTF model ----------------------------------------- */
-  const gltf = await new GLTFLoader().loadAsync(
-    'assets/player/low_poly_soldier/scene.gltf'
-  );
+//   /* 1 — load the GLTF model ----------------------------------------- */
+//   const gltf = await new GLTFLoader().loadAsync(
+//     'assets/player/low_poly_soldier/scene.gltf'
+//   );
 
-  const model = gltf.scene;
+//   const model = gltf.scene;
+//   model.scale.set(0.07, 0.07, 0.07);
 
-  model.scale.set(0.07, 0.07, 0.07);          // keep whatever scale you need
+
+//   model.traverse(o => {
+//     if (!o.isMesh) return;
+
+//     const src     = o.material;
+//     const dstOpts = { toneMapped: false };
+
+//     if (src.map) {
+//       src.map.encoding = THREE.SRGBColorSpace;   // correct colour-space
+//       dstOpts.map      = src.map;
+//     } else {
+//       dstOpts.color    = 0xffffff;
+//     }
+
+//     // using MeshBasicMaterial we can render the model without lighting
+//     o.material = new THREE.MeshBasicMaterial(dstOpts); 
+//   });
+
   
 
-  /* 2 — tiny off-screen renderer ------------------------------------ */
-  const rtt = new THREE.WebGLRenderer({ alpha:true, preserveDrawingBuffer:true });
-  rtt.outputColorSpace = THREE.SRGBColorSpace;
-  rtt.setSize(256,256);
-  rtt.setClearColor(0x0d0f3a, 1);                   // transparent navy
+//   /* 2 — tiny off-screen renderer ------------------------------------ */
+//   const rtt = new THREE.WebGLRenderer({ alpha:true, preserveDrawingBuffer:true });
+//   rtt.outputColorSpace = THREE.SRGBColorSpace;
+//   rtt.setSize(256,256);
+//   rtt.setClearColor(0x0d0f3a, 1);                   // transparent navy
 
-  /* 3 — scene + lights ---------------------------------------------- */
-  const scene = new THREE.Scene();
-  scene.add(model);
-  scene.add(new THREE.HemisphereLight(0xffffff,0x444444,1.2));
-  scene.add(new THREE.DirectionalLight(0xffffff,0.8).position.set(0.4,1,0.6));
+//   /* 3 — scene + lights ---------------------------------------------- */
+//   const scene = new THREE.Scene();
+//   scene.add(model);
+//   scene.add(new THREE.HemisphereLight(0xffffff,0x444444,1.2));
+//   scene.add(new THREE.DirectionalLight(0xffffff,0.8).position.set(0.4,1,0.6));
 
-  /* 4 — frame the head ---------------------------------------------- */
-  scene.updateMatrixWorld(true);
-  const box   = new THREE.Box3().setFromObject(model);
-  // DEBUG Visual helper – adds a green wireframe box around what the algorithm thinks the model is
-  const helper = new THREE.Box3Helper(box, 0x00ff00);
-  scene.add(helper);
+//   /* 4 — frame the head ---------------------------------------------- */
+//   scene.updateMatrixWorld(true);
+//   const box   = new THREE.Box3().setFromObject(model);
+//   // DEBUG Visual helper – adds a green wireframe box around what the algorithm thinks the model is
+//   const helper = new THREE.Box3Helper(box, 0x00ff00);
+//   scene.add(helper);
 
-  const size  = box.getSize(new THREE.Vector3());
-  const cen   = box.getCenter(new THREE.Vector3());
-  model.position.sub(cen);
-  const fov   = 100; // 35 originally
-  const cam   = new THREE.PerspectiveCamera(fov,1,0.01,20);
-  const dist  = Math.max(size.x,size.y)*0.4 /
-                Math.tan(THREE.MathUtils.degToRad(fov*0.5));
-  // cam.position.copy(cen).add(new THREE.Vector3(0,0,dist));
-  // cam.lookAt(cen);
-  cam.position.set(0, 0, dist);    // look from +Z toward origin
-  cam.lookAt(0, 0, 0);
+//   const size  = box.getSize(new THREE.Vector3());
+//   const cen   = box.getCenter(new THREE.Vector3());
+//   //model.position.sub(cen);              // shift so centre == (0,0,0)
+//   model.updateMatrixWorld(true);           // VERY important – refresh matrices
+
+//   // print the position of the box and of the player
+//   console.log('Box center:', cen);
+//   console.log('Model position:', model.position);
+
+//   const fov   = 100; // 35 originally
+//   const cam   = new THREE.PerspectiveCamera(
+//     fov,
+//     1,
+//     0.01,
+//     20);
+//   const dist  = Math.max(size.x,size.y)*0.4 /
+//                 Math.tan(THREE.MathUtils.degToRad(fov*0.5));
+//   cam.position.copy(cen).add(new THREE.Vector3(0,0,dist));
+//   cam.lookAt(cen);
 
 
-  /* 5 — render & return --------------------------------------------- */
-  rtt.render(scene,cam);
+//   /* ---------- 6. make sure textures are finished ---------- */
+//   await new Promise(requestAnimationFrame);      // render on next tick
+
+
+//   /* 5 — render & return --------------------------------------------- */
+//   rtt.render(scene,cam);
   
-  const ret = rtt.domElement.toDataURL('image/png')
+//   const ret = rtt.domElement.toDataURL('image/png')
   
-  console.log('Portrait created:', ret);
+//   console.log('Portrait created:', ret);
 
-  return ret;
-}
+//   return ret;
+// }
 
 
 export class Game {
@@ -183,6 +213,7 @@ export class Game {
     this.renderer.setSize(container.clientWidth, container.clientHeight);
     //this.renderer.setPixelRatio(window.devicePixelRatio); // Optional but recommended
     container.appendChild(this.renderer.domElement);
+    this.renderer.shadowMap.enabled = true; // Enable shadows
 
     // Clock for delta time.
     this.clock = new THREE.Clock();
@@ -255,9 +286,10 @@ export class Game {
     this.ui.updateMolotovCount(this.molotovTokens); // initial 3
     this.ui.camera = this.camera;
     
-    createPortrait()
-        .then(png => this.ui.setAvatar(png))
-        .catch(err => console.error('portrait error', err));
+    this.ui.setAvatar('assets/ui/avatar.png');
+    // createPortrait()
+    //     .then(png => this.ui.setAvatar(png))
+    //     .catch(err => console.error('portrait error', err));
 
     /* ------ Minimap -------------------------------------------------- */
     this.minimap = new Minimap(1000 /* ground size */, 160 /* px */);

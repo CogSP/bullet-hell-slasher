@@ -149,10 +149,17 @@ export class UI {
         .centre-hud .avatar img{width:100%;height:100%;object-fit:cover;}
 
         .centre-hud .level-ring{
-          position:absolute; bottom:-2px; right:-2px;
-          width:22px; aspect-ratio:1; border-radius:50%;
-          font:12px/22px Arial,Helvetica,sans-serif; text-align:center;
-          color:#fff; background:#191919; border:1px solid #fff;
+          position:absolute; 
+          bottom:-2px; 
+          right:3px;
+          width:22px; 
+          aspect-ratio:1; 
+          border-radius:50%;
+          font:12px/22px Arial,Helvetica,sans-serif; 
+          text-align:center;
+          color:#fff; 
+          background:#191919; 
+          border:1px solid #fff;
           box-shadow:0 0 4px 1px #000c inset;
         }
 
