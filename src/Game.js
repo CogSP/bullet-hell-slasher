@@ -9,93 +9,33 @@ import { Minimap } from './Minimap.js';
 import { Turret } from './Turret.js';
 
 
-// async function createPortrait() {
-
-//   /* 1 — load the GLTF model ----------------------------------------- */
-//   const gltf = await new GLTFLoader().loadAsync(
-//     'assets/player/low_poly_soldier/scene.gltf'
-//   );
-
-//   const model = gltf.scene;
-//   model.scale.set(0.07, 0.07, 0.07);
-
-
-//   model.traverse(o => {
-//     if (!o.isMesh) return;
-
-//     const src     = o.material;
-//     const dstOpts = { toneMapped: false };
-
-//     if (src.map) {
-//       src.map.encoding = THREE.SRGBColorSpace;   // correct colour-space
-//       dstOpts.map      = src.map;
-//     } else {
-//       dstOpts.color    = 0xffffff;
-//     }
-
-//     // using MeshBasicMaterial we can render the model without lighting
-//     o.material = new THREE.MeshBasicMaterial(dstOpts); 
-//   });
-
-  
-
-//   /* 2 — tiny off-screen renderer ------------------------------------ */
-//   const rtt = new THREE.WebGLRenderer({ alpha:true, preserveDrawingBuffer:true });
-//   rtt.outputColorSpace = THREE.SRGBColorSpace;
-//   rtt.setSize(256,256);
-//   rtt.setClearColor(0x0d0f3a, 1);                   // transparent navy
-
-//   /* 3 — scene + lights ---------------------------------------------- */
-//   const scene = new THREE.Scene();
-//   scene.add(model);
-//   scene.add(new THREE.HemisphereLight(0xffffff,0x444444,1.2));
-//   scene.add(new THREE.DirectionalLight(0xffffff,0.8).position.set(0.4,1,0.6));
-
-//   /* 4 — frame the head ---------------------------------------------- */
-//   scene.updateMatrixWorld(true);
-//   const box   = new THREE.Box3().setFromObject(model);
-//   // DEBUG Visual helper – adds a green wireframe box around what the algorithm thinks the model is
-//   const helper = new THREE.Box3Helper(box, 0x00ff00);
-//   scene.add(helper);
-
-//   const size  = box.getSize(new THREE.Vector3());
-//   const cen   = box.getCenter(new THREE.Vector3());
-//   //model.position.sub(cen);              // shift so centre == (0,0,0)
-//   model.updateMatrixWorld(true);           // VERY important – refresh matrices
-
-//   // print the position of the box and of the player
-//   console.log('Box center:', cen);
-//   console.log('Model position:', model.position);
-
-//   const fov   = 100; // 35 originally
-//   const cam   = new THREE.PerspectiveCamera(
-//     fov,
-//     1,
-//     0.01,
-//     20);
-//   const dist  = Math.max(size.x,size.y)*0.4 /
-//                 Math.tan(THREE.MathUtils.degToRad(fov*0.5));
-//   cam.position.copy(cen).add(new THREE.Vector3(0,0,dist));
-//   cam.lookAt(cen);
-
-
-//   /* ---------- 6. make sure textures are finished ---------- */
-//   await new Promise(requestAnimationFrame);      // render on next tick
-
-
-//   /* 5 — render & return --------------------------------------------- */
-//   rtt.render(scene,cam);
-  
-//   const ret = rtt.domElement.toDataURL('image/png')
-  
-//   console.log('Portrait created:', ret);
-
-//   return ret;
-// }
-
-
 export class Game {
-  
+    
+  /**
+   * Spawn one instance of a dungeon module.
+   * @param {string} baseName  – the key in this.dungeonParts
+   * @param {THREE.Vector3} pos
+   * @param {number} ry        – yaw in radians  (optional)
+   * @param {number} s         – uniform scale   (optional)
+   * @returns {THREE.Object3D} – the new instance (so you can tweak it)
+   */
+  spawnDungeonPart(baseName, pos, ry = 0, s = 1) {
+
+    const prefab = this.dungeonParts?.[baseName];
+    if (!prefab) {
+      console.warn(`Dungeon part "${baseName}" not found`);
+      return null;
+    }
+
+    const inst = prefab.clone(true);        // deep clone, share geo+mat
+    inst.position.copy(pos);
+    inst.rotation.y = ry;
+    inst.scale.setScalar(s);
+
+    this.scene.add(inst);
+    return inst;
+  }
+
   constructor(container) {
 
     this.draggingTurret   = null;   // { img, ghost } when user is dragging
@@ -106,21 +46,6 @@ export class Game {
     // Create the scene and set a background color.
     this.scene = new THREE.Scene();
     this.scene.background = new THREE.Color(0x202020);
-
-    // // Load a ground texture using TextureLoader
-    // const textureLoader = new THREE.TextureLoader();
-    // // https://www.fab.com/listings/42e25675-17ba-4205-a155-bd9216519ca1
-    // const groundTexture = textureLoader.load('assets/ground/japanese_shrine_stone_floor_ugrxbjkfa_ue_high/Textures/T_ugrxbjkfa_4K_B.png'); // update with your texture path
-    
-    // // Enable repeat wrapping so the texture tiles across the surface
-    // groundTexture.wrapS = THREE.RepeatWrapping;
-    // groundTexture.wrapT = THREE.RepeatWrapping;
-
-    // // Set the repeat factors (adjust these to cover the map with the desired detail)
-    // groundTexture.repeat.set(100, 100); // increase for more tiling
-
-    // // Optionally, improve texture quality at oblique angles
-    // groundTexture.anisotropy = 16;
 
     /* ---------- PBR cobblestone ground ---------- */
     const texLoader = new THREE.TextureLoader();
@@ -170,6 +95,72 @@ export class Game {
 
     // Add the ground to the scene
     this.scene.add(groundMesh);
+
+    /* ───── Load “modular_dungeon” glTF ─────────────────────────── */
+    const loader = new GLTFLoader().setPath('assets/dungeon/modular_dungeon/');   // base path
+
+    loader.load(
+      'scene.gltf', 
+      (gltf) => {
+        this.dungeonRoot = gltf.scene; // keep a reference
+
+        this.dungeonParts = {}
+
+        this.dungeonRoot.traverse((o) => {
+          if (!o.isMesh) return;
+          // const base = o.name.replace(/[.\d_]+$/, '');
+
+          // if (!this.dungeonParts[base]) {
+            // this.dungeonParts[base] = o;
+          this.dungeonParts[o.name.toLowerCase()] ??= o;   // keep original name
+          // }
+
+          /* optional tidy-ups that apply to *every* copy */
+          o.castShadow = o.receiveShadow = true;
+          o.material.toneMapped = false;        // emissive torch flames etc.
+          o.material.side = THREE.FrontSide;    // cull hidden faces
+        });
+
+        /* Put the original kit outside the playable area so you don’t see it.
+        (z = -999 is cheaper than deleting the hierarchy) */
+        this.dungeonRoot.position.set(0, -999, 0);
+        this.scene.add(this.dungeonRoot);
+
+        console.log('Dungeon parts ready →', Object.keys(this.dungeonParts));   // peek in DevTools
+        
+        /* ---------- build an initial room ---------- */
+        const tile = 6;     // each prefab wall is ~6 m wide
+        const h    = 0;     // ground height (y)
+    
+        // Outer walls: 3×3 square
+        for (let i = -1; i <= 1; i++) {
+          // north & south
+          this.spawnDungeonPart('object_4', new THREE.Vector3(i*tile, h, -2*tile));
+          this.spawnDungeonPart('object_5', new THREE.Vector3(i*tile, h,  2*tile), Math.PI, 10);
+          // west & east
+          this.spawnDungeonPart('object_6', new THREE.Vector3(-2*tile, h, i*tile),  Math.PI/2);
+          this.spawnDungeonPart('object_7', new THREE.Vector3( 2*tile, h, i*tile), -Math.PI/2);
+        }
+    
+        // Door in the south wall
+        this.spawnDungeonPart('object_9', new THREE.Vector3(0, h, 2*tile+0.01), Math.PI);
+    
+        // Torches in the four corners
+        const torchH = 2.5;
+        [
+          [-2*tile+0.3, torchH, -2*tile+0.3],
+          [ 2*tile-0.3, torchH, -2*tile+0.3],
+          [-2*tile+0.3, torchH,  2*tile-0.3],
+          [ 2*tile-0.3, torchH,  2*tile-0.3],
+        ].forEach(([x,y,z]) => {
+          const torch = this.spawnDungeonPart('object_11', new THREE.Vector3(x,y,z));
+          torch.material.emissive.set(0xffb248);     // warm glow
+        });
+        /* ---------------------------------------------- */
+      },
+      undefined,
+      (err) => console.error('Failed to load dungeon:', err)
+    );
 
     // Setup camera.
     const aspect = container.clientWidth / container.clientHeight;
