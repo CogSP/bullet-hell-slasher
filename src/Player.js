@@ -25,7 +25,9 @@ export class Player {
     // this.staminaRegenRate = 15;     // Stamina per second when not running
     // this.staminaDrainRate = 25;     // Stamina per second while running
     // this.canRun = true;             // Flag to prevent running when stamina is depleted
-
+    this.level       = 1;         // starts at Lv-1
+    this.xp          = 0;         // current XP
+    this.xpToNext    = 50;        // XP needed for Lv-up (first tier)
 
     const loader = new GLTFLoader();
     loader.load(
@@ -115,6 +117,26 @@ export class Player {
       }
     );
   }
+
+
+  /* how many % of the ring should be filled right now? */
+  get xpPct() { return (this.xp / this.xpToNext) * 100; }
+
+  /** add experience, returns true if a level-up happened */
+  addXP(amount = 1) {
+    this.xp += amount;
+
+    let levelled = false;
+    while (this.xp >= this.xpToNext) {
+      this.xp     -= this.xpToNext;
+      this.level  += 1;
+      this.xpToNext = Math.floor(this.xpToNext * 1.25); // harder each tier
+      levelled = true;
+    }
+    return levelled;
+  }
+
+
 
   spendMana(amount) {
     if (this.mana >= amount) {

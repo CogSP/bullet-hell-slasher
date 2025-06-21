@@ -131,10 +131,18 @@ export class UI {
 
         /* —— centre container —— */
         .centre-hud{
-          position:absolute; bottom:62px; left:50%; translate:-50% 0;
-          display:flex; align-items:center; gap:16px;
-          padding:6px 10px; border:1px solid var(--hud-border);
-          border-radius:12px; background:var(--hud-bg);
+          position:absolute;
+          bottom:62px; 
+          left:50%; 
+          translate:-50% 0;
+          display:flex; 
+          flex-direction:column;
+          align-items:center; 
+          gap:10px;
+          padding:6px 10px; 
+          border:1px solid var(--hud-border);
+          border-radius:12px; 
+          background:var(--hud-bg);
           backdrop-filter:blur(8px);            /* subtle glass */
           pointer-events:none;
           transition:opacity .3s;
@@ -163,6 +171,33 @@ export class UI {
           box-shadow:0 0 4px 1px #000c inset;
         }
 
+        /* ╭─ LEVEL RINGS ───────────────────────────────────────────╮ */
+        .level-ring,
+        .level-badge{                 /* <- add this class to the floating badge */
+          --p:0;                      /* progress 0-100 (set in JS)              */
+          position:relative;
+        }
+        .level-ring::before,
+        .level-badge::before{
+          content:'';
+          position:absolute;
+          inset:-3px;                 /* ring thickness */
+          border-radius:50%;
+          background:
+            conic-gradient(#ffd700 calc(var(--p)*1%),transparent 0);
+          -webkit-mask:
+              radial-gradient(farthest-side,
+                              transparent calc(100% - 3px),   /* inside → hole  */
+                              #000       calc(100% - 3px));    /* 3 px rim stays */
+                  mask:
+              radial-gradient(farthest-side,
+                              transparent calc(100% - 3px),
+                              #000       calc(100% - 3px));
+
+          pointer-events:none;
+        }
+
+
         /* —— bar column —— */
         .centre-hud .bars{display:flex; flex-direction:column; gap:4px;}
 
@@ -174,8 +209,8 @@ export class UI {
         .centre-hud .mp-fill   {height:100%; background:var(--mp-grad);}
 
         /* —— spell icon —— */
-        .centre-hud .spell{
-          width:46px; aspect-ratio:1; object-fit:contain;
+        .centre-hud .horde{
+          width:40px; aspect-ratio:1; object-fit:contain;
           filter:drop-shadow(0 0 4px #0008);
           transition:transform .15s;
         }
@@ -185,75 +220,7 @@ export class UI {
       document.head.appendChild(style);
     }
 
-    /* ╭──────────────── centre HUD ────────────────╮ */
-    this.centerHUD = document.createElement('div');
-    this.centerHUD.className = 'centre-hud';
-    document.body.appendChild(this.centerHUD);
-
-    /* avatar + level */
-    const avatarWrap = document.createElement('div');
-    avatarWrap.className = 'avatar';
-    this.centerHUD.appendChild(avatarWrap);
-
-    this.avatarImg = document.createElement('img');
-    //this.avatarImg.src = 'src/img/rad-grad.png';
-    avatarWrap.appendChild(this.avatarImg);
-
-    this.setAvatar = (src)=>{     
-      this.avatarImg.src = src; 
-      console.log('Avatar image set to:', src);
-    };
-
-
-    this.levelRing = document.createElement('div');
-    this.levelRing.className = 'level-ring';
-    this.levelRing.textContent = '1';
-    avatarWrap.appendChild(this.levelRing);
-
-    /* bars */
-    const bars = document.createElement('div');
-    bars.className = 'bars';
-    this.centerHUD.appendChild(bars);
-
-    const hpBack = document.createElement('div');
-    hpBack.className = 'bar-back';
-    this.hpFill = document.createElement('div');
-    this.hpFill.className = 'hp-fill';
-    hpBack.appendChild(this.hpFill);
-    bars.appendChild(hpBack);
-
-    const mpBack = document.createElement('div');
-    mpBack.className = 'bar-back';
-    mpBack.style.height = '6px';                      // thinner mana bar
-    this.mpFill = document.createElement('div');
-    this.mpFill.className = 'mp-fill';
-    mpBack.appendChild(this.mpFill);
-    bars.appendChild(mpBack);
-
-    /* spell icon */
-    this.spellImg = document.createElement('img');
-    this.spellImg.className = 'spell';
-    this.spellImg.src = 'assets/ui/turret.svg';
-    this.centerHUD.appendChild(this.spellImg);
-
-    /**
-     * @param {number} hp   0-100
-     * @param {number} mp   0-100
-     * @param {string?} spellSrc optional new icon path
-     */
-    this.updateCenterHUD = (hp, mp, spellSrc = null) => {
-      this.hpFill.style.width = `${Math.max(0,Math.min(hp,100))}%`;
-      this.mpFill.style.width = `${Math.max(0,Math.min(mp,100))}%`;
-
-      /* low-mana visual cue */
-      if (mp < 20)  this.spellImg.classList.add('low-mana');
-      else          this.spellImg.classList.remove('low-mana');
-
-      /* swap spell icon if requested */
-      if (spellSrc) this.spellImg.src = spellSrc;
-    };
-
-
+    
     /* finally hide the old power-up widgets */
     // this.powerupBarContainer.style.display = 'none';
     // this.powerupLabel.style.display       = 'none';
@@ -351,6 +318,132 @@ export class UI {
       }
     });
 
+
+    
+    /* ╭──────────────── centre HUD ────────────────╮ */
+    this.centerHUD = document.createElement('div');
+    this.centerHUD.className = 'centre-hud';
+    document.body.appendChild(this.centerHUD);
+
+    /* ── SPELL BAR ───────────────────────── */
+    const spellRow = document.createElement('div');
+    spellRow.style.cssText = `
+        display:flex; gap:10px; pointer-events:auto;   /* allow clicking */
+    `;
+    this.centerHUD.appendChild(spellRow);
+
+    /* key overlays – one reusable helper ▶ */
+    const addKeyBadge = (btn, key) => {
+      const badge = document.createElement('span');
+      badge.textContent = key;
+      badge.style.cssText = `
+          position:absolute; top:-4px; left:-4px;
+          width:18px; height:18px; border-radius:50%;
+          background:#000d; color:#fff; font:12px/18px Arial,sans-serif;
+          border:1px solid #fff; text-align:center;
+          pointer-events:none;
+      `;
+      btn.style.position = 'relative';
+      btn.appendChild(badge);
+    };
+
+    
+    /* — 1. Turret — */
+    spellRow.appendChild(this.turretBtn);
+    addKeyBadge(this.turretBtn, '1');
+
+    /* — 2. Molotov — */
+    spellRow.appendChild(this.molotovBtn);
+    addKeyBadge(this.molotovBtn, '2');
+
+    /* — 3-5. empty slots — */
+    for (let k = 3; k <= 5; k++) {
+      const placeholder = document.createElement('img');
+      placeholder.src   = 'assets/ui/slot_empty.svg';   // a 48×48 grey frame
+      placeholder.alt   = `Spell ${k}`;
+      placeholder.classList.add('ui-btn');
+      placeholder.style.opacity = '.25';
+      addKeyBadge(placeholder, String(k));
+      spellRow.appendChild(placeholder);
+    }
+
+
+    /* avatar + level */
+    const avatarWrap = document.createElement('div');
+    avatarWrap.className = 'avatar';
+    this.centerHUD.appendChild(avatarWrap);
+
+    this.avatarImg = document.createElement('img');
+    //this.avatarImg.src = 'src/img/rad-grad.png';
+    avatarWrap.appendChild(this.avatarImg);
+
+    this.setAvatar = (src)=>{     
+      this.avatarImg.src = src; 
+      console.log('Avatar image set to:', src);
+    };
+
+
+    this.levelRing = document.createElement('div');
+    this.levelRing.className = 'level-ring';
+    this.levelRing.textContent = '1';
+    avatarWrap.appendChild(this.levelRing);
+
+    /* bars */
+    const bars = document.createElement('div');
+    bars.className = 'bars';
+    this.centerHUD.appendChild(bars);
+
+    const hpBack = document.createElement('div');
+    hpBack.className = 'bar-back';
+    this.hpFill = document.createElement('div');
+    this.hpFill.className = 'hp-fill';
+    hpBack.appendChild(this.hpFill);
+    bars.appendChild(hpBack);
+
+    const mpBack = document.createElement('div');
+    mpBack.className = 'bar-back';
+    mpBack.style.height = '6px';                      // thinner mana bar
+    this.mpFill = document.createElement('div');
+    this.mpFill.className = 'mp-fill';
+    mpBack.appendChild(this.mpFill);
+    bars.appendChild(mpBack);
+
+    /* horde icon, should show the wave number in Roman numbers */
+    this.horde = document.createElement('img');
+    this.horde.className = 'horde';
+    this.horde.src = 'assets/ui/horde.svg';
+    this.centerHUD.appendChild(this.horde);
+
+    /* ── map 1 → I, 2 → II … (extend if you have more waves) */
+    const romans = ['I','II','III','IV','V','VI','VII','VIII','IX','X'];
+
+    /** change the horde badge to the correct Roman‐numeral svg */
+    this.setHordeWave = (waveNum) => {
+      const r = romans[waveNum - 1] ?? waveNum;          // fallback to the number
+      this.horde.src = `assets/ui/horde/horde_${r}.svg`;       // e.g. assets/ui/horde_IV.svg
+    };
+
+    /* avatar + bars row (existing code, now inside its own flex row) */
+    const coreRow = document.createElement('div');
+    coreRow.style.cssText = 'display:flex; align-items:center; gap:16px; pointer-events:none;';
+    this.centerHUD.appendChild(coreRow);
+
+    coreRow.appendChild(avatarWrap);
+    coreRow.appendChild(bars);
+    coreRow.appendChild(this.horde);
+
+    /**
+     * @param {number} hp   0-100
+     * @param {number} mp   0-100
+     */
+    this.updateCenterHUD = (hp, mp) => {
+      this.hpFill.style.width = `${Math.max(0,Math.min(hp,100))}%`;
+      this.mpFill.style.width = `${Math.max(0,Math.min(mp,100))}%`;
+
+    };
+
+
+
     // --- Bottom HUD ---
     this.bottomHUD = document.createElement("div");
     this.bottomHUD.style.position = "absolute";
@@ -415,14 +508,20 @@ export class UI {
     `;                                  /* (↕ centre-vertically)          */
     document.body.appendChild(this.playerBars);
 
-    /* LEVEL BADGE (always “1” for now) ■ */
+    /* LEVEL BADGE (always “1” for now) */
     this.levelBadge = document.createElement('div');
     this.levelBadge.style.cssText = `
-        width:22px; height:22px; border-radius:50%;
-        background:#222; border:1px solid #fff; color:#fff;
-        font:12px/22px Arial,sans-serif; text-align:center;
+        width:22px; 
+        height:22px; 
+        border-radius:50%;
+        background:#222; 
+        border:1px solid #fff; 
+        color:#fff;
+        font:12px/22px Arial,sans-serif; 
+        text-align:center;
     `;
     this.levelBadge.textContent = '1';
+    this.levelBadge.className = 'level-badge'
     this.playerBars.appendChild(this.levelBadge);
 
     /* ➊ a column wrapper that will hold the two bars */
@@ -452,7 +551,22 @@ export class UI {
     this.manaBack.appendChild(this.manaBar);
     this.barsColumn.appendChild(this.manaBack);
     this.playerBars.appendChild(this.barsColumn);
+
+    this.updateLevelRing?.(1,0); // to make the HUD start at level 1 / 0%
   }
+
+  /**
+   * @param {number} level         – 1,2,3…
+   * @param {number} xpPct         – 0-100
+   */
+  updateLevelRing(level, xpPct){
+    this.levelRing.textContent  = level;
+    this.levelBadge.textContent = level;
+    /* tweak 0-100 to fit the CSS custom property */
+    this.levelRing .style.setProperty('--p', xpPct);
+    this.levelBadge.style.setProperty('--p', xpPct);
+  }
+
 
   showFloatingMessage(text, worldPosition) {
     const message = document.createElement("div");
@@ -516,10 +630,9 @@ export class UI {
 
   // fourth param is optional so existing calls won’t break
   update(health, score, wave = null, turretTokens = null) {
-    this.uiContainer.innerHTML =
-      `Health: ${health} <br>Score: ${score}` +
-      (wave   !== null ? `<br>Wave: ${wave}`         : "") +
-      (turretTokens !== null ? `<br>Turrets: ${turretTokens}` : "");
+    if (wave != null) { 
+      this.setHordeWave(wave);
+    }
   }
 
   showMessage(text, duration = 3) {

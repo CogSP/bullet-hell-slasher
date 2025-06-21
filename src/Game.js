@@ -677,6 +677,21 @@ export class Game {
         this.addTurretToken(1, enemy.mesh.position);
       }
     }
+
+      /* give the player XP */
+    const xpGained      = enemy.xpValue ?? 1;           // or whatever you like
+    const didLevelUp    = this.player.addXP(xpGained);
+
+    /* push the info to the HUD every kill */
+    this.ui.updateLevelRing(
+        this.player.level,
+        this.player.xpPct
+    );
+
+    if (didLevelUp) {
+      this.ui.showFloatingMessage(`LEVEL ${this.player.level}! 🆙`,
+                                  this.player.mesh.position.clone());
+    }
   }
 
 
@@ -1176,6 +1191,8 @@ export class Game {
       this.pickups,
       this.cameraAngle
     );
+
+    this.ui.updateLevelRing(this.player.level, this.player.xpPct);
 
     // Render the scene.
     this.renderer.render(this.scene, this.camera);
