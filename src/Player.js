@@ -90,7 +90,6 @@ export class Player {
           // Listen for the finished event to reset the knife flag.
           this.mixer.addEventListener('finished', (event) => {
             if (event.action === this.actions.knife) {
-              console.log('Knife attack finished:', event.action.time);
               this.isAttacking = false;
               this.knifeDamageApplied = false; // Reset knife damage flag.
               // Reset the knife attack speed back to normal.
@@ -108,7 +107,7 @@ export class Player {
             this.activeAction.play();
           }
         } else {
-          console.log('No animations found in the model.');
+          console.error('No animations found in the model.');
         }
       },
       undefined,
@@ -170,7 +169,6 @@ export class Player {
       this.actions.knife.timeScale = knifeAttackSpeedMultiplier;
       this.isAttacking = true;
       input['MouseLeft'] = false;
-      console.log('Knife attack triggered with multiplier:', knifeAttackSpeedMultiplier);
       return;
     }
   
@@ -189,35 +187,9 @@ export class Player {
     moveDir.addScaledVector(cameraRight, rightInput);
   
 
-    // commented since I decided to always run. The stamina bar is converted in a mana bar for turrets/molotovs.
+    let currentSpeed = this.speed * 1.8; // Always run
 
-    // const isTryingToRun = input['ShiftLeft'] && this.canRun;
-    // let currentSpeed = this.speed;
-  
-    // if (moveDir.length() > 0) {
-    //   moveDir.normalize();
-  
-    //   if (!this.isAttacking) {
-    //     if (isTryingToRun && this.actions.run) {
-    //       this.fadeToAction('run');
-    //       currentSpeed *= 1.8;
-    //       this.actions.run.timeScale = 1;
-  
-    //       // Drain stamina while running
-    //       this.stamina -= this.staminaDrainRate * delta;
-    //       if (this.stamina <= 0) {
-    //         this.stamina = 0;
-    //         this.canRun = false;
-    //       }
-    //     } else if (this.actions.walk) {
-    //       this.fadeToAction('walk');
-    //       this.actions.run.timeScale = 1;
-    //     }
-    //   }
-
-      let currentSpeed = this.speed * 1.8; // Always run
-
-      if (moveDir.length() > 0) {
+    if (moveDir.length() > 0) {
         moveDir.normalize();
 
         if (!this.isAttacking) {
@@ -226,28 +198,45 @@ export class Player {
             this.actions.run.timeScale = 1;
           }
         }
-  
+
       this.velocity.copy(moveDir).multiplyScalar(currentSpeed);
       const movement = moveDir.clone().multiplyScalar(currentSpeed * delta);
       this.mesh.position.add(movement);
-  
+
+      const nextPos = this.mesh.position.clone()
+
       const targetPosition = this.mesh.position.clone().add(moveDir);
       targetPosition.y = this.mesh.position.y;
       this.mesh.lookAt(targetPosition);
+
+      // simple sphere-vs-box test (treat player as 0.75-unit radius capsule head)
+      const playerRadius = 0.75;
+      let blocked = false;
+
+      const tmp = new THREE.Box3();
+      for ( const box of this.game.staticColliders) {
+        // expand box by the player radius → cheaper than real capsule test
+        tmp.copy(box).expandByScalar(playerRadius);
+        if ( tmp.containsPoint(nextPos) ) {
+          blocked = true;
+          break;
+        }
+      }
+
+      if ( !blocked ) {
+        this.mesh.position.copy( nextPos );
+      }
+      else {
+        this.mesh.position.sub(movement); // undo the last movement
+      }
+
     } else {
       this.velocity.set(0, 0, 0);
       if (!this.isAttacking && this.actions.idle) {
         this.fadeToAction('idle');
       }
     }
-  
-    // if (!isTryingToRun) {
-    //   this.stamina += this.staminaRegenRate * delta;
-    //   if (this.stamina >= this.maxStamina) {
-    //     this.stamina = this.maxStamina;
-    //     this.canRun = true;
-    //   }
-    // }
+
   
     // Knife damage logic
     if (this.activeAction === this.actions.knife && !this.knifeDamageApplied) {
@@ -305,7 +294,6 @@ export class Player {
 
   heal(amount) {
     this.health = Math.min(100, this.health + amount);
-    console.log(`Healed! Current health: ${this.health}`);
   }
 
   showDamageEffects(amount) {

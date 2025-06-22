@@ -2,9 +2,13 @@ import * as THREE from 'three';
 import { GLTFLoader } from 'https://cdn.jsdelivr.net/npm/three@0.150.1/examples/jsm/loaders/GLTFLoader.js';
 
 export class Enemy {
-  constructor(player, mass = 1) {
+  constructor(player, staticColliders, pathfinder, mass = 1) {
     this.mass = mass
     this.player = player;
+    this.staticColliders = staticColliders;
+    this.pathfinder = pathfinder;
+    this.path       = [];   // world-space way-points
+    this.nextWP     = 0;    // index in the path
     this.maxHealth = 3;
     this.health = 3;
     this.speed = 15;
@@ -20,7 +24,7 @@ export class Enemy {
     this.mixer = null; // Will hold the AnimationMixer
     this.walkAction = null;
     this.attackAction = null;
-    
+
     const loader = new GLTFLoader();
     // https://www.fab.com/listings/733760dc-83ac-483e-a75b-223c8a36be97
     loader.load('assets/zombie_commoner/scene.gltf', (gltf) => {
@@ -111,7 +115,7 @@ export class Enemy {
   }
 
   update(delta, camera) {
-    
+
     // before position update
     this.velocity.lerp(new THREE.Vector3(), delta * 0.1);   // cheap air-drag
     this.mesh.position.addScaledVector(this.velocity, delta);
@@ -143,9 +147,33 @@ export class Enemy {
     /* simple air-drag so they eventually stop */
     this.velocity.multiplyScalar(Math.exp(-4 * delta)); // 4 ≈ damping factor
 
-    // move by whatever velocity they currently have
-    this.mesh.position.addScaledVector(this.velocity, delta);
     
+    // used during collision detection
+    const tmpBox = new THREE.Box3();
+
+    // // move by whatever velocity they currently have
+    // this.mesh.position.addScaledVector(this.velocity, delta);
+    const nextPos = this.mesh.position.clone().addScaledVector(this.velocity, delta);
+
+    let blocked = false;
+    for (const box of this.staticColliders) {
+      // expand by the zombie’s personal radius so he stops a little early
+      tmpBox.copy( box ).expandByScalar( this.radius );
+
+      if ( tmpBox.containsPoint( nextPos ) ) {
+        blocked = true;
+        break;                            // no need to test others
+      }
+    }
+
+    if ( !blocked ) {
+      // free to move
+      this.mesh.position.copy( nextPos );
+    } else {
+      // super-simple slide: zero the component that points into the obstacle
+      // (optional – delete if you just want them to stop)
+      this.velocity.set( 0, 0, 0 );
+    }
     
     // Ensure the enemy faces the player.
     this.mesh.lookAt(this.player.mesh.position);
@@ -162,7 +190,39 @@ export class Enemy {
     if (camera) {
       this.healthBarGroup.lookAt(camera.position);
     }
-    
+
+
+    if (!this.pathfinder) return;
+
+    // refresh the path every 1-2 s, or when the target moved a lot
+    this.repathTimer = ( this.repathTimer ?? 0 ) - delta;
+    const targetPos  = this.player.mesh.position;
+
+    if ( this.repathTimer <= 0 ||
+        targetPos.distanceToSquared( this.goal ?? new THREE.Vector3() ) > 25 )
+    {
+      this.path = this.pathfinder.findPath( this.mesh.position, targetPos );
+      this.nextWP = 0;
+      this.goal   = targetPos.clone();
+      this.repathTimer = 1.5 + Math.random()*0.5;   // jitter avoids sync
+    }
+
+    // get current waypoint
+    if ( this.nextWP < this.path.length ) {
+      const wp = this.path[ this.nextWP ];
+
+      // 2. steer toward it
+      const dir = wp.clone().sub( this.mesh.position );
+      const dist = dir.length();
+
+      if ( dist < 0.5 ) {            // reached → advance
+        this.nextWP++;
+      } else {
+        dir.normalize();
+        this.velocity.addScaledVector( dir.multiplyScalar( this.speed ), delta );
+      }
+    }
+
     // Update the animation mixer.
     if (this.mixer) {
       this.mixer.update(delta);

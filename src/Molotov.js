@@ -63,7 +63,6 @@ export class Molotov {
             }
         /* expire */
         if (this.timer >= this.lifetime) {
-            console.log("Molotov expired after " + this.lifetime + " seconds");
             this.scene.remove(this.group);
             this.fire = null;        // GC – Game will filter nulls
             return true;             // “I’m dead, remove me”

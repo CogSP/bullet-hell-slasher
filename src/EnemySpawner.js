@@ -1,19 +1,19 @@
 import { Enemy } from './Enemy.js';
 
 export class EnemySpawner {
-  constructor(scene, player, game) {
+  constructor(scene, player, game, pathfinder) {
     this.scene = scene;
     this.player = player;
+    this.pathfinder = pathfinder;
     this.enemies = [];
 
     // Horde system
     this.currentWave = 1;
-    this.enemiesPerWave = 30;   // Base number of enemies in the first wave
+    this.enemiesPerWave = 10;   // Base number of enemies in the first wave
     //this.enemiesPerWave = 50000 // testing
     this.spawnedEnemies = 0;
     this.maxEnemiesInWave = this.enemiesPerWave;
-    this.spawnInterval = 0.5;
-    //this.spawnInterval = 0.5 // testing
+    this.spawnInterval = 10000000; // original: 0.5 
     this.spawnTimer = 0;
     this.game = game;
 
@@ -31,7 +31,11 @@ export class EnemySpawner {
 
       if (this.spawnedEnemies < this.maxEnemiesInWave && this.spawnTimer >= this.spawnInterval) {
         this.spawnTimer = 0;
-        const enemy = new Enemy(this.player);
+        const enemy = new Enemy(
+          this.player, 
+          this.game.staticColliders,
+          this.pathfinder
+        );
         this.enemies.push(enemy);
         this.scene.add(enemy.mesh);
         this.spawnedEnemies++;
@@ -57,8 +61,6 @@ export class EnemySpawner {
     this.maxEnemiesInWave = this.enemiesPerWave + this.currentWave * 3; // scale enemy count
     this.spawnInterval = Math.max(0.2, 1.0 - this.currentWave * 0.05);   // faster spawn rate
     this.waveInProgress = true;
-
-    console.log(`Wave ${this.currentWave} started with ${this.maxEnemiesInWave} enemies!`);
 
     // Optional: UI message
     if (this.player?.game?.ui?.showMessage) {
