@@ -2,22 +2,25 @@ import * as THREE from 'three';
 import { GLTFLoader } from 'https://cdn.jsdelivr.net/npm/three@0.150.1/examples/jsm/loaders/GLTFLoader.js';
 
 export class Enemy {
-  constructor(player, staticColliders, pathfinder, mass = 1) {
+  constructor(scene, player, staticColliders, pathfinder, mass = 1) {
     this.mass = mass
     this.player = player;
+    this.scene = scene;
     this.staticColliders = staticColliders;
     this.pathfinder = pathfinder;
     this.path       = [];   // world-space way-points
     this.nextWP     = 0;    // index in the path
     this.maxHealth = 3;
     this.health = 3;
-    this.speed = 15;
+    this.speed = 30;
     this.mass = 1;                   // tweak later
     this.velocity  = new THREE.Vector3(); // will hold knock-back & sliding
     this.radius = 1;
     this.isAttacking = false; // flag to track attack state
     this.hasDamaged = false;  // flag to track if damage was applied in current cycle
     this.lastAttackCycleTime = 0; // store last attack animation time for detecting a new loop
+
+    this.i = 0
 
     // Load a GLTF zombie model.
     this.mesh = new THREE.Group(); // Temporary placeholder until the model is loaded.
@@ -114,11 +117,130 @@ export class Enemy {
     return false;
   }
 
+  pathfinding_logic(delta) {
+    
+    this.repathTimer = (this.repathTimer ?? 0) - delta;
+    const targetPos  = this.player.mesh.position;
+
+    // refresh the path every 1-2 s, or when the target moved a lot
+    if (this.repathTimer <= 0 || targetPos.distanceToSquared(this.goal ?? new THREE.Vector3()) > 25) {
+      this.path = this.pathfinder.findPath(this.mesh.position, targetPos, this.scene);
+      console.log('New path:', this.path);
+      this.nextWP = 0;
+      this.goal = targetPos.clone();
+
+      // random value between 1.5 and 2, creating a random "jitter" to
+      // avoid all enemies to recalcutate at the exact same time
+      this.repathTimer = 1.5 + Math.random()*0.5;
+    }
+
+    // get current waypoint
+    if (this.nextWP < this.path.length) {
+      const wp = this.path[this.nextWP];
+
+      console.log('Current waypoint:', wp.clone());
+      console.log('Enemy position:', this.mesh.position.clone());
+
+      // 2. steer toward it
+      const dir = wp.clone().sub(this.mesh.position);
+      const dist = dir.length();
+
+      console.log('Direction to waypoint:', dir.clone());
+      console.log('Distance to waypoint:', dist);
+      dir.y = 0; // flatten
+      // dir.normalize();
+
+      // smooth look at the waypoint
+      // using lookAt will cause to have a hard snap-look
+      // that looks bad
+      this.smooth_look_at(dir.clone().normalize(), delta);
+
+      if (dist < 2.5) { // if we are 0.5 units away from the waypoint let's start moving to the next one
+        this.nextWP++;
+        console.warn('Reached waypoint, moving to next:', this.nextWP);
+      } else {
+      
+        console.log('Steering towards waypoint:', wp.clone());
+        dir.normalize();
+
+        // Euler integration of acceleration
+        this.velocity.addScaledVector(dir.multiplyScalar(this.speed), delta);
+        console.log('New velocity:', this.velocity.clone());
+
+      }
+    }
+  }
+
+  yawFromDir(dir) {
+    return Math.atan2(dir.x, dir.z);
+  }
+
+  smooth_look_at(dir, delta) {
+
+    
+    ///////////////////////////////////////////////////////
+    /* Yaw-only Euler Lerp */
+
+    // const desiredYaw = this.yawFromDir(dir);
+    // const euler = new THREE.Euler().setFromQuaternion(this.mesh.quaternion);
+    // const currentYaw = euler.y;
+
+    // // shortest delta between angles
+    // let deltaYaw = desiredYaw - currentYaw;
+    // if (deltaYaw > Math.PI) deltaYaw -= 2*Math.PI;
+    // if (deltaYaw < -Math.PI) deltaYaw += 2*Math.PI;
+
+    // const turnSpeed = 5; // radians/sec
+    // const maxTurn = turnSpeed * delta;
+    // deltaYaw = THREE.MathUtils.clamp(deltaYaw, -maxTurn, maxTurn);
+
+    // // apply new yaw
+    // euler.y = currentYaw + deltaYaw;
+    // this.mesh.quaternion.setFromEuler(euler);
+
+    ///////////////////////////////////////////////////////
+    /* Quaternion Slerp */
+
+    // Somewhere up top of your file
+    const forward = new THREE.Vector3(0, 0, 1); 
+
+    // Compute target quaternion to look along toWP
+    const targetQuat = new THREE.Quaternion()
+      .setFromUnitVectors(forward, dir);
+
+    // Slerp from current to target, with a turnSpeed factor
+    const turnSpeed = 4; // tweak: higher = faster turn
+    this.mesh.quaternion.slerp(targetQuat, Math.min(1, delta * turnSpeed));
+
+    ///////////////////////////////////////////////////////
+
+  }
+
+  updateHealthBar(delta, camera) {
+    // Update the health bar.
+    const lerpSpeed = 5;
+    this.currentHealthFraction = THREE.MathUtils.lerp(
+      this.currentHealthFraction,
+      this.targetHealthFraction,
+      delta * lerpSpeed
+    );
+    this.healthBarFG.scale.x = this.currentHealthFraction;
+    this.healthBarFG.position.x = -(1 - this.currentHealthFraction);
+    if (camera) {
+      this.healthBarGroup.lookAt(camera.position);
+    }
+  }
+
   update(delta, camera) {
 
+    if (!this.pathfinder) return;
+
     // before position update
+    // every frame the velocity decays by a small percentage, like air resistance
     this.velocity.lerp(new THREE.Vector3(), delta * 0.1);   // cheap air-drag
-    this.mesh.position.addScaledVector(this.velocity, delta);
+
+    // move by whatever velocity they currently have
+    const nextPos = this.mesh.position.clone().addScaledVector(this.velocity, delta);
 
     // Check the distance to the player to determine if the enemy should attack.
     const distanceToPlayer = this.mesh.position.distanceTo(this.player.mesh.position); 
@@ -137,91 +259,37 @@ export class Enemy {
         this.walkAction.reset().fadeIn(0.2).play();
       }
     }
-    
-    if (!this.isAttacking) {
-      // accelerate toward the player
-      const dir = this.player.mesh.position.clone().sub(this.mesh.position).normalize().multiplyScalar(this.speed);
-      this.velocity.addScaledVector(dir, delta);
-    }
 
     /* simple air-drag so they eventually stop */
     this.velocity.multiplyScalar(Math.exp(-4 * delta)); // 4 ≈ damping factor
-
     
     // used during collision detection
     const tmpBox = new THREE.Box3();
 
-    // // move by whatever velocity they currently have
-    // this.mesh.position.addScaledVector(this.velocity, delta);
-    const nextPos = this.mesh.position.clone().addScaledVector(this.velocity, delta);
 
     let blocked = false;
     for (const box of this.staticColliders) {
       // expand by the zombie’s personal radius so he stops a little early
-      tmpBox.copy( box ).expandByScalar( this.radius );
+      tmpBox.copy(box).expandByScalar( this.radius );
 
-      if ( tmpBox.containsPoint( nextPos ) ) {
+      if (tmpBox.containsPoint(nextPos)) {
         blocked = true;
         break;                            // no need to test others
       }
     }
 
-    if ( !blocked ) {
+    if (!blocked) {
       // free to move
-      this.mesh.position.copy( nextPos );
+      this.mesh.position.copy(nextPos);
     } else {
       // super-simple slide: zero the component that points into the obstacle
       // (optional – delete if you just want them to stop)
-      this.velocity.set( 0, 0, 0 );
+      this.velocity.set(0, 0, 0);
     }
-    
-    // Ensure the enemy faces the player.
-    this.mesh.lookAt(this.player.mesh.position);
-    
-    // Update the health bar.
-    const lerpSpeed = 5;
-    this.currentHealthFraction = THREE.MathUtils.lerp(
-      this.currentHealthFraction,
-      this.targetHealthFraction,
-      delta * lerpSpeed
-    );
-    this.healthBarFG.scale.x = this.currentHealthFraction;
-    this.healthBarFG.position.x = -(1 - this.currentHealthFraction);
-    if (camera) {
-      this.healthBarGroup.lookAt(camera.position);
-    }
+        
+    this.pathfinding_logic(delta);
 
-
-    if (!this.pathfinder) return;
-
-    // refresh the path every 1-2 s, or when the target moved a lot
-    this.repathTimer = ( this.repathTimer ?? 0 ) - delta;
-    const targetPos  = this.player.mesh.position;
-
-    if ( this.repathTimer <= 0 ||
-        targetPos.distanceToSquared( this.goal ?? new THREE.Vector3() ) > 25 )
-    {
-      this.path = this.pathfinder.findPath( this.mesh.position, targetPos );
-      this.nextWP = 0;
-      this.goal   = targetPos.clone();
-      this.repathTimer = 1.5 + Math.random()*0.5;   // jitter avoids sync
-    }
-
-    // get current waypoint
-    if ( this.nextWP < this.path.length ) {
-      const wp = this.path[ this.nextWP ];
-
-      // 2. steer toward it
-      const dir = wp.clone().sub( this.mesh.position );
-      const dist = dir.length();
-
-      if ( dist < 0.5 ) {            // reached → advance
-        this.nextWP++;
-      } else {
-        dir.normalize();
-        this.velocity.addScaledVector( dir.multiplyScalar( this.speed ), delta );
-      }
-    }
+    this.updateHealthBar(delta, camera);
 
     // Update the animation mixer.
     if (this.mixer) {

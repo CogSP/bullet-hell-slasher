@@ -9,11 +9,11 @@ export class EnemySpawner {
 
     // Horde system
     this.currentWave = 1;
-    this.enemiesPerWave = 10;   // Base number of enemies in the first wave
+    this.enemiesPerWave = 1;   // Base number of enemies in the first wave
     //this.enemiesPerWave = 50000 // testing
     this.spawnedEnemies = 0;
     this.maxEnemiesInWave = this.enemiesPerWave;
-    this.spawnInterval = 10000000; // original: 0.5 
+    this.spawnInterval = 0.5; // 10000000 
     this.spawnTimer = 0;
     this.game = game;
 
@@ -32,6 +32,7 @@ export class EnemySpawner {
       if (this.spawnedEnemies < this.maxEnemiesInWave && this.spawnTimer >= this.spawnInterval) {
         this.spawnTimer = 0;
         const enemy = new Enemy(
+          this.scene,
           this.player, 
           this.game.staticColliders,
           this.pathfinder
