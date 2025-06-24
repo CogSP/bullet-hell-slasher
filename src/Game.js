@@ -1,5 +1,4 @@
 import * as THREE from 'three';
-import { GLTFLoader } from 'https://cdn.jsdelivr.net/npm/three@0.150.1/examples/jsm/loaders/GLTFLoader.js';
 import { Player } from './Player.js';
 import { EnemySpawner } from './EnemySpawner.js';
 import { UI } from './UI.js';
@@ -7,292 +6,32 @@ import { Bullet } from './Bullet.js';
 import { HeartPickup } from './HeartPickup.js';
 import { Minimap } from './Minimap.js';
 import { Turret } from './Turret.js';
-
-
-// async function createPortrait() {
-
-//   /* 1 — load the GLTF model ----------------------------------------- */
-//   const gltf = await new GLTFLoader().loadAsync(
-//     'assets/player/low_poly_soldier/scene.gltf'
-//   );
-
-//   const model = gltf.scene;
-//   model.scale.set(0.07, 0.07, 0.07);
-
-
-//   model.traverse(o => {
-//     if (!o.isMesh) return;
-
-//     const src     = o.material;
-//     const dstOpts = { toneMapped: false };
-
-//     if (src.map) {
-//       src.map.encoding = THREE.SRGBColorSpace;   // correct colour-space
-//       dstOpts.map      = src.map;
-//     } else {
-//       dstOpts.color    = 0xffffff;
-//     }
-
-//     // using MeshBasicMaterial we can render the model without lighting
-//     o.material = new THREE.MeshBasicMaterial(dstOpts); 
-//   });
-
-  
-
-//   /* 2 — tiny off-screen renderer ------------------------------------ */
-//   const rtt = new THREE.WebGLRenderer({ alpha:true, preserveDrawingBuffer:true });
-//   rtt.outputColorSpace = THREE.SRGBColorSpace;
-//   rtt.setSize(256,256);
-//   rtt.setClearColor(0x0d0f3a, 1);                   // transparent navy
-
-//   /* 3 — scene + lights ---------------------------------------------- */
-//   const scene = new THREE.Scene();
-//   scene.add(model);
-//   scene.add(new THREE.HemisphereLight(0xffffff,0x444444,1.2));
-//   scene.add(new THREE.DirectionalLight(0xffffff,0.8).position.set(0.4,1,0.6));
-
-//   /* 4 — frame the head ---------------------------------------------- */
-//   scene.updateMatrixWorld(true);
-//   const box   = new THREE.Box3().setFromObject(model);
-//   // DEBUG Visual helper – adds a green wireframe box around what the algorithm thinks the model is
-//   const helper = new THREE.Box3Helper(box, 0x00ff00);
-//   scene.add(helper);
-
-//   const size  = box.getSize(new THREE.Vector3());
-//   const cen   = box.getCenter(new THREE.Vector3());
-//   //model.position.sub(cen);              // shift so centre == (0,0,0)
-//   model.updateMatrixWorld(true);           // VERY important – refresh matrices
-
-//   // print the position of the box and of the player
-//   console.log('Box center:', cen);
-//   console.log('Model position:', model.position);
-
-//   const fov   = 100; // 35 originally
-//   const cam   = new THREE.PerspectiveCamera(
-//     fov,
-//     1,
-//     0.01,
-//     20);
-//   const dist  = Math.max(size.x,size.y)*0.4 /
-//                 Math.tan(THREE.MathUtils.degToRad(fov*0.5));
-//   cam.position.copy(cen).add(new THREE.Vector3(0,0,dist));
-//   cam.lookAt(cen);
-
-
-//   /* ---------- 6. make sure textures are finished ---------- */
-//   await new Promise(requestAnimationFrame);      // render on next tick
-
-
-//   /* 5 — render & return --------------------------------------------- */
-//   rtt.render(scene,cam);
-  
-//   const ret = rtt.domElement.toDataURL('image/png')
-  
-//   console.log('Portrait created:', ret);
-
-//   return ret;
-// }
-
+import { GridPathfinder } from './GridPathfinder.js';
+import { RGBELoader } from 'https://cdn.jsdelivr.net/npm/three@0.150.1/examples/jsm/loaders/RGBELoader.js';
+import { GLTFLoader } from 'https://cdn.jsdelivr.net/npm/three@0.150.1/examples/jsm/loaders/GLTFLoader.js';
 
 export class Game {
   
   constructor(container) {
 
-    this.draggingTurret   = null;   // { img, ghost } when user is dragging
-    this.turretPrefab     = null;   // loaded once, then cloned for the ghost
-
     this.container = container;
 
-    // Create the scene and set a background color.
-    this.scene = new THREE.Scene();
-    this.scene.background = new THREE.Color(0x202020);
-
-    // // Load a ground texture using TextureLoader
-    // const textureLoader = new THREE.TextureLoader();
-    // // https://www.fab.com/listings/42e25675-17ba-4205-a155-bd9216519ca1
-    // const groundTexture = textureLoader.load('assets/ground/japanese_shrine_stone_floor_ugrxbjkfa_ue_high/Textures/T_ugrxbjkfa_4K_B.png'); // update with your texture path
+    this.initScene();
+    this.initCamera();
+    this.initRenderer();
+    this.initLights();
     
-    // // Enable repeat wrapping so the texture tiles across the surface
-    // groundTexture.wrapS = THREE.RepeatWrapping;
-    // groundTexture.wrapT = THREE.RepeatWrapping;
+    // Data structures for static models
+    this.staticColliders = [];
 
-    // // Set the repeat factors (adjust these to cover the map with the desired detail)
-    // groundTexture.repeat.set(100, 100); // increase for more tiling
-
-    // // Optionally, improve texture quality at oblique angles
-    // groundTexture.anisotropy = 16;
-
-    /* ---------- PBR cobblestone ground ---------- */
-    const texLoader = new THREE.TextureLoader();
-
-    const gColor  = texLoader.load('assets/ground/pbr/ground_albedo.jpg');
-    const gNormal = texLoader.load('assets/ground/pbr/ground_normal.png');
-    const gRough  = texLoader.load('assets/ground/pbr/ground_rough.jpg');
-    const gAO     = texLoader.load('assets/ground/pbr/ground_ao.png');
-
-    // colour textures must be flagged as sRGB so lighting looks right
-    gColor.colorSpace = THREE.SRGBColorSpace;
-
-    // tile the texture across the plane (fewer, larger tiles than before)
-    const TILE_REPEAT = 40;
-    [gColor, gNormal, gRough, gAO].forEach(t => {
-      if (t) {
-        t.wrapS = t.wrapT = THREE.RepeatWrapping;
-        t.repeat.set(TILE_REPEAT, TILE_REPEAT);
-        t.anisotropy = 16;
-      }
+    // Load all static models, then initialize pathfinding + spawner
+    this.loadStaticModels().then(() => {
+      this.initPathfinding();
+      this.initEnemySpawner();
+      this.start();
     });
-
-    const groundMaterial = new THREE.MeshStandardMaterial({
-      map:           gColor,
-      normalMap:     gNormal,
-      roughnessMap:  gRough,
-      aoMap:         gAO ?? undefined,
-      roughness:     1                             // let the texture drive it
-    });
-
-    // dial the bump strength up or down if needed
-    groundMaterial.normalScale.set(0.9, 0.9);
-    /* ----------------------------------------------------- */
-
-
-
-    // Create a large plane geometry for the ground (e.g., 1000 x 1000 units)
-    const groundGeometry = new THREE.PlaneGeometry(1000, 1000);
-
-    //const groundMaterial = new THREE.MeshStandardMaterial({ map: groundTexture });
-    const groundMesh = new THREE.Mesh(groundGeometry, groundMaterial);
-    groundMesh.rotation.x = -Math.PI / 2; // Make the plane horizontal.
-    groundMesh.position.y = 0; // Set at ground level.
-
-    // Optionally, allow the ground to receive shadows
-    groundMesh.receiveShadow = true;
-
-    // Add the ground to the scene
-    this.scene.add(groundMesh);
-
-    // Setup camera.
-    const aspect = container.clientWidth / container.clientHeight;
-
     
-    const viewSize = 100; // Adjust this value to zoom in/out
-    
-    
-    // Calculate orthographic parameters
-    const left = -viewSize * aspect / 2;
-    const right = viewSize * aspect / 2;
-    const top = viewSize / 2;
-    const bottom = -viewSize / 2;
-    
-    // Create an orthographic camera
-    this.camera = new THREE.OrthographicCamera(left, right, top, bottom, 0.1, 1000);
-    
-    // Position the camera for an isometric view.
-    // A common setup is to rotate 45° around Y and 35.264° (arctan(1/√2)) above the horizontal.
-    this.camera.position.set(40, 40, 40); 
-    this.camera.lookAt(new THREE.Vector3(0, 0, 0));
-    
-    // --- New: Store initial camera state ---
-    // Calculate the angle (in the XZ plane) from the camera's position.
-    this.initialCameraAngle = Math.atan2(this.camera.position.z, this.camera.position.x); // ~45° in radians
-    this.cameraAngle = this.initialCameraAngle;
-    // Calculate the distance from the center (ignoring Y).
-    this.cameraDistance = Math.sqrt(
-      this.camera.position.x * this.camera.position.x +
-      this.camera.position.z * this.camera.position.z
-    );
-    // Store the camera's height.
-    this.cameraHeight = this.camera.position.y;
-
-    this.cameraVel = new THREE.Vector3();   // starts at rest
-    this.fixedCameraCenter = new THREE.Vector3(); // “orbit-about” point in fixed mode
-    
-
-    // Setup renderer.
-    this.renderer = new THREE.WebGLRenderer({ antialias: true });
-    this.renderer.setSize(container.clientWidth, container.clientHeight);
-    //this.renderer.setPixelRatio(window.devicePixelRatio); // Optional but recommended
-    container.appendChild(this.renderer.domElement);
-    this.renderer.shadowMap.enabled = true; // Enable shadows
-
-    // Clock for delta time.
-    this.clock = new THREE.Clock();
-
-    this.pickups = [];
-
-    this.turrets = [];
-
-    this.turretTokens = 1900;          // how many the player can still place
-    this.molotovTokens = 1000;        // give player a few to start
-    this.molotovs      = [];       // active instances
-    this.draggingMolotov = null;   // {img, ghost}
-
-    // Create the player.
-    this.player = new Player(this.scene, this.camera);
-    this.player.game = this; // So player can access game and UI
-        
-    this.scene.add(this.player.mesh);
-
-
-    // Set up a callback so that when the player’s knife attack reaches its hit moment,
-    // we check for nearby enemies and apply damage.
-    this.player.onKnifeHit = (damage) => {
-      console.log('Knife hit! Damage:', damage);
-      const knifeRange = 10; // Define your knife range.
-      
-      // Compute the player's forward direction (assuming local forward is -Z).
-      const forward = new THREE.Vector3(0, 0, 1);
-      forward.applyQuaternion(this.player.mesh.quaternion).normalize();
-      
-      this.enemySpawner.enemies.forEach(enemy => {
-        // Compute the vector from the player to the enemy.
-        const toEnemy = enemy.mesh.position.clone().sub(this.player.mesh.position);
-        const distance = toEnemy.length();
-        console.log('Distance to enemy:', distance);
-        console.log('knifeRange:', knifeRange);
-        
-        if (distance < knifeRange) {
-          // Normalize to get the direction.
-          toEnemy.normalize();
-          // Check if the enemy is in front of the player.
-          if (forward.dot(toEnemy) > 0) { // dot > 0 means enemy is in front.
-            console.log('Enemy hit! Damage:', damage);
-            const enemyDead = enemy.takeDamage(damage);
-            if (enemyDead) {
-              // Remove enemy from scene if health reaches 0
-              this.enemySpawner.removeEnemy(enemy);
-
-              // Record the kill.
-              this.registerEnemyKill(enemy);
-            }
-            else {
-              // Knock-back impulse when the knife hits
-              const knockback = damage * 10;   // impulse magnitude
-              enemy.velocity.add(              // Δv = J / m
-                toEnemy.clone().multiplyScalar(knockback / enemy.mass)
-              );
-            }
-          }
-        }
-      });
-    };
-    
-    // Enemy spawner to handle enemy creation.
-    this.enemySpawner = new EnemySpawner(this.scene, this.player, this);
-
-    // UI overlay for health and score.
-    this.ui = new UI();
-    this.ui.updateTurretCount(this.turretTokens);   // initial 0
-    this.ui.updateMolotovCount(this.molotovTokens); // initial 3
-    this.ui.camera = this.camera;
-    
-    this.ui.setAvatar('assets/ui/avatar.png');
-    // createPortrait()
-    //     .then(png => this.ui.setAvatar(png))
-    //     .catch(err => console.error('portrait error', err));
-
-    /* ------ Minimap -------------------------------------------------- */
-    this.minimap = new Minimap(1000 /* ground size */, 160 /* px */);
+    // TODO: I AM GONNA REMOVE THE POWERUP AND TRANSFORM THEM IN SOMETHING ELSE
 
     // Array to hold active bullets.
     this.bullets = [];
@@ -337,15 +76,308 @@ export class Game {
     this.bulletHellTimer = 0;       // Timer for bullet hell.
     this.bulletHellKillCount = 0;   // Tracks extra kills while ultra powerup is active.
 
-    // Create an input object to track key states.
-    this.input = {};
+    
+    this.initGameState();
+    this.registerEventListeners();
 
+  }
+
+  initScene() {
+    // Create the scene and set a background color.
+    this.scene = new THREE.Scene();
+    this.scene.background = new THREE.Color(0x202020);
+
+    /* ---------- PBR cobblestone ground ---------- */
+    const texLoader = new THREE.TextureLoader();
+
+    const gColor  = texLoader.load('assets/ground/pbr/ground_albedo.jpg');
+    const gNormal = texLoader.load('assets/ground/pbr/ground_normal.png');
+    const gRough  = texLoader.load('assets/ground/pbr/ground_rough.jpg');
+    const gAO     = texLoader.load('assets/ground/pbr/ground_ao.png');
+
+    // colour textures must be flagged as sRGB so lighting looks right
+    gColor.colorSpace = THREE.SRGBColorSpace;
+
+    // tile the texture across the plane (fewer, larger tiles than before)
+    const TILE_REPEAT = 40;
+    [gColor, gNormal, gRough, gAO].forEach(t => {
+      if (t) {
+        t.wrapS = t.wrapT = THREE.RepeatWrapping;
+        t.repeat.set(TILE_REPEAT, TILE_REPEAT);
+        t.anisotropy = 16;
+      }
+    });
+
+    const groundMaterial = new THREE.MeshStandardMaterial({
+      map:           gColor,
+      normalMap:     gNormal,
+      roughnessMap:  gRough,
+      aoMap:         gAO ?? undefined,
+      roughness:     1                             // let the texture drive it
+    });
+
+    // dial the bump strength up or down if needed
+    groundMaterial.normalScale.set(0.9, 0.9);
+    /* ----------------------------------------------------- */
+
+    // Create a large plane geometry for the ground (e.g., 1000 x 1000 units)
+    //const groundGeometry = new THREE.PlaneGeometry(1000, 1000);
+    const groundGeometry = new THREE.PlaneGeometry(500, 500);
+
+    const groundMesh = new THREE.Mesh(groundGeometry, groundMaterial);
+    groundMesh.rotation.x = -Math.PI / 2; // Make the plane horizontal.
+    groundMesh.position.y = 0; // Set at ground level.
+
+    // Optionally, allow the ground to receive shadows
+    groundMesh.receiveShadow = true;
+
+    // Add the ground to the scene
+    this.scene.add(groundMesh);
+  }
+
+  initCamera() {
+    // Setup camera.
+    const aspect = this.container.clientWidth / this.container.clientHeight;
+
+    const viewSize = 100; // Adjust this value to zoom in/out
+    
+    
+    // Calculate orthographic parameters
+    const left = -viewSize * aspect / 2;
+    const right = viewSize * aspect / 2;
+    const top = viewSize / 2;
+    const bottom = -viewSize / 2;
+    
+    // Create an orthographic camera
+    this.camera = new THREE.OrthographicCamera(left, right, top, bottom, 0.1, 1000);
+    
+    // Position the camera for an isometric view.
+    // A common setup is to rotate 45° around Y and 35.264° (arctan(1/√2)) above the horizontal.
+    this.camera.position.set(40, 40, 40); 
+    this.camera.lookAt(new THREE.Vector3(0, 0, 0));
+    
+    // --- New: Store initial camera state ---
+    // Calculate the angle (in the XZ plane) from the camera's position.
+    this.initialCameraAngle = Math.atan2(this.camera.position.z, this.camera.position.x); // ~45° in radians
+    this.cameraAngle = this.initialCameraAngle;
+    // Calculate the distance from the center (ignoring Y).
+    this.cameraDistance = Math.sqrt(
+      this.camera.position.x * this.camera.position.x +
+      this.camera.position.z * this.camera.position.z
+    );
+    // Store the camera's height.
+    this.cameraHeight = this.camera.position.y;
+
+    this.cameraVel = new THREE.Vector3();   // starts at rest
+    this.fixedCameraCenter = new THREE.Vector3(); // “orbit-about” point in fixed mode
+  }
+
+  initRenderer() {
+    // Setup renderer.
+    this.renderer = new THREE.WebGLRenderer({ antialias: true });
+    this.renderer.setSize(this.container.clientWidth, this.container.clientHeight);
+    //this.renderer.setPixelRatio(window.devicePixelRatio); // Optional but recommended
+    this.container.appendChild(this.renderer.domElement);
+    this.renderer.shadowMap.enabled = true; // Enable shadows
+    // Clock for delta time.
+    this.clock = new THREE.Clock();
+  }
+
+  initLights() {
     // Setup lighting.
     const ambientLight = new THREE.AmbientLight(0xffffff, 0.5);
     this.scene.add(ambientLight);
     const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
     directionalLight.position.set(0, 50, 50);
     this.scene.add(directionalLight);
+  }
+
+  async loadStaticModels() {
+    await this.loadStaticBarn();
+  }
+
+  async loadStaticBarn() {
+
+    const gltfLoader = new GLTFLoader().setPath('assets/barn/modular_old_wooden_barn_and_fence/'); // base path
+    const gltf = await gltfLoader.loadAsync('scene.gltf');
+
+    const barnRoot = gltf.scene;
+
+    /* Nice-to-have defaults */
+    barnRoot.traverse((o) => {
+      if (o.isMesh) {
+        o.castShadow = true;
+        o.receiveShadow = true;
+        o.material.toneMapped = false;      // prevents “washed-out” look
+      }
+    });
+
+    /* Position / scale to taste */
+    barnRoot.position.set(100, 0, 50);
+    barnRoot.rotation.y = Math.PI;          // turn 180° if door faces away
+    barnRoot.scale.setScalar(30);          // % of the original size
+
+    // compute one big bounding box that encloses the entire barn
+    const barnBBox = new THREE.Box3().setFromObject(barnRoot)
+                                    .expandByScalar(0.5);   // optional margin
+
+
+    const texPath = 'assets/barn/modular_old_wooden_barn_and_fence/textures/';
+    const tex     = new THREE.TextureLoader();
+
+    const tBase   = tex.load(texPath + 'MI_wooden_fence_barn_baseColor.png');
+    const tMR     = tex.load(texPath + 'MI_wooden_fence_barn_metallicRoughness.png');
+    const tNormal = tex.load(texPath + 'MI_wooden_fence_barn_normal.png');
+
+    /* glTF (and UE/Babylon) pack **AO(R)**, **Roughness(G)**, **Metallic(B)**
+      into one image.  THREE can share that same texture for both channels.   */
+    tBase.colorSpace = THREE.SRGBColorSpace;   // very important!
+
+    /* 2.  Build a MeshStandardMaterial that uses those maps */
+    const woodMat = new THREE.MeshStandardMaterial({
+      map:           tBase,
+      metalnessMap:  tMR,
+      roughnessMap:  tMR,
+      normalMap:     tNormal,
+      // these scalar values get *multiplied* with the map data
+      metalness:     1.0,
+      roughness:     1.0,
+    });
+    // optional tweak: make the normal map a little stronger
+    woodMat.normalScale.set( 1.0, 1.0 );
+
+
+    /* 3.  Apply the wood material to every mesh that currently uses
+          “wood” (or simply to *every* mesh if you like)              */
+    barnRoot.traverse((o) => {
+      if (!o.isMesh) return;
+
+      // Option A: blanket-replace all materials
+      // o.material = woodMat;
+
+      // Option B: only replace meshes whose original name contains "wood"
+      if (o.material.name?.toLowerCase().includes('wood')) {
+        o.material = woodMat;
+      }
+    });
+  
+    this.scene.add(barnRoot);
+
+    this.staticColliders = this.staticColliders ?? [];          // create once
+    barnRoot.updateWorldMatrix( true, true );                   // make sure matrices are up-to-date
+
+    barnRoot.traverse( (o) => {
+      if ( !o.isMesh ) return;
+
+      const box = new THREE.Box3().setFromObject( o );         // world-space AABB
+      this.staticColliders.push(box);
+    }); 
+  }
+
+  initPathfinding() {
+    // const mapCells = 200;             // 200×200 => 1000 m² if cell = 5 m
+    // const cellSize = 5;               // world metres per cell
+    const mapCells = 250;
+    const cellSize = 2;
+    this.pathfinder = new GridPathfinder(mapCells, mapCells, cellSize);
+    this.pathfinder.showGrid(this.scene)
+
+    const padding = 0;
+    for (const box of this.staticColliders) {
+      // make a _copy_ so you don’t permanently warp your real bounding boxes
+      const padded = box.clone();
+      if (padding > 0) {
+        const padded = box.clone().expandByScalar(padding);
+      }
+      this.pathfinder.addCollider(padded);
+    }
+
+    // this.pathfinder.drawObstacles(this.scene);
+  }
+
+  initEnemySpawner() {
+    // Enemy spawner to handle enemy creation.
+    this.enemySpawner = new EnemySpawner(
+      this.scene, 
+      this.player, 
+      this,
+      this.pathfinder
+    );
+  }
+
+  initGameState() {
+
+    // Create the player
+    this.player = new Player(this.scene, this.camera);
+    this.player.game = this; // So player can access game and UI
+    this.scene.add(this.player.mesh);
+
+    // Set up a callback so that when the player’s knife attack reaches its hit moment,
+    // we check for nearby enemies and apply damage.
+    this.player.onKnifeHit = (damage) => {
+      const knifeRange = 10; // Define your knife range.
+      
+      // Compute the player's forward direction (assuming local forward is -Z).
+      const forward = new THREE.Vector3(0, 0, 1);
+      forward.applyQuaternion(this.player.mesh.quaternion).normalize();
+      
+      this.enemySpawner.enemies.forEach(enemy => {
+        // Compute the vector from the player to the enemy.
+        const toEnemy = enemy.mesh.position.clone().sub(this.player.mesh.position);
+        const distance = toEnemy.length();
+        
+        if (distance < knifeRange) {
+          // Normalize to get the direction.
+          toEnemy.normalize();
+          // Check if the enemy is in front of the player.
+          if (forward.dot(toEnemy) > 0) { // dot > 0 means enemy is in front.
+            const enemyDead = enemy.takeDamage(damage);
+            if (enemyDead) {
+              // Remove enemy from scene if health reaches 0
+              this.enemySpawner.removeEnemy(enemy);
+
+              // Record the kill.
+              this.registerEnemyKill(enemy);
+            }
+            else {
+              // Knock-back impulse when the knife hits
+              const knockback = damage * 10;   // impulse magnitude
+              enemy.velocity.add(              // Δv = J / m
+                toEnemy.clone().multiplyScalar(knockback / enemy.mass)
+              );
+            }
+          }
+        }
+      });
+    };
+    
+    // Create the UI
+    this.ui = new UI();
+    this.ui.updateTurretCount(this.turretTokens);   // initial 0
+    this.ui.updateMolotovCount(this.molotovTokens); // initial 3
+    this.ui.camera = this.camera;
+    
+    this.ui.setAvatar('assets/ui/avatar.png');
+    
+    // Create the Minimap
+    this.minimap = new Minimap(1000 /* ground size */, 160 /* px */);
+
+
+    // Create whatever
+    this.pickups = [];
+    this.turrets = [];
+    this.turretTokens = 1900;          // how many the player can still place
+    this.molotovTokens = 1000;        // give player a few to start
+    this.molotovs      = [];       // active instances
+    this.draggingMolotov = null;   // {img, ghost}
+
+
+  }
+
+  registerEventListeners() {
+
+    // Create an input object to track key states.
+    this.input = {};
 
     // Listen for window resize.
     window.addEventListener('resize', () => this.onWindowResize(), false);
@@ -353,22 +385,85 @@ export class Game {
     // Listen for mouse clicks to shoot.
     this.container.addEventListener('click', (event) => this.onMouseClick(event));
 
+    this.isRMBPanning = false;        // are we currently panning? (RMB = Right Mouse Button)
+    this.panPrev      = new THREE.Vector2(); // last mouse pos while panning
+    this.pixelsToWorld = 0.12;        // ⇢ tune speed (px → world-units)
+
+    window.addEventListener('mousemove', e => {
+            
+      if (this.isRMBPanning) {
+
+        // 1px  ≙  this.pixelsToWorld  world-units  (keep your existing scalar)
+        const scale = this.pixelsToWorld;
+
+        /* camera basis on the XZ plane ------------------------------------- */
+        const yUp     = new THREE.Vector3(0, 1, 0);
+        const forward = new THREE.Vector3();           // camera -Z
+        this.camera.getWorldDirection(forward);
+        forward.y = 0; forward.normalize();            // flatten to ground
+
+        const right = new THREE.Vector3()
+                        .crossVectors(forward, yUp)    // F × Y = R
+                        .normalize();
+
+        /* mouse delta ------------------------------------------------------- */
+        const dxPx = e.clientX - this.panPrev.x;       // +X  → screen right
+        const dyPx = e.clientY - this.panPrev.y;       // +Y  → screen down
+        this.panPrev.set(e.clientX, e.clientY);
+
+        /* map to world space ----------------------------------------------- */
+        const move = new THREE.Vector3()
+                      .addScaledVector(right,   -dxPx * scale)   // drag → world-right
+                      .addScaledVector(forward,  dyPx * scale);  // drag down → world-forward
+
+        if (!this.cameraFollow) {
+          this.fixedCameraCenter.add(move)
+        }
+      }
+
+      this.panPrev.set(e.clientX, e.clientY);
+
+    });
+
+    this.draggingTurret   = null;   // { img, ghost } when user is dragging
+  
+    this.panCursor = 'grab'; // standard cursor for panning
+    this.defaultCursor = this.container.style.cursor || 'auto';
+
     this.container.addEventListener('mousedown', (event) => {
       if (event.button === 0) { // Left click
-        if (this.draggintTurret || this.draggingMolotov) return; // Don't attack while dragging
+        if (this.draggingTurret || this.draggingMolotov) return; // Don't attack while dragging
         this.input['MouseLeft'] = true;
+      }
+      if (event.button === 2) {            // RMB → start panning
+
+        if (!this.cameraFollow) {
+          this.isRMBPanning = true;
+          this.panPrev.set(event.clientX, event.clientY);
+          this.container.style.cursor = this.panCursor;    // ⬅️ change cursor
+          event.preventDefault();                          // no context-menu
+        }
       }
     });
     this.container.addEventListener('mouseup', (event) => {
       if (event.button === 0) {
         this.input['MouseLeft'] = false;
       }
+      if (event.button === 2) {
+        this.isRMBPanning = false;
+        this.container.style.cursor = this.defaultCursor; // ⬅️ restore
+      }
     });
 
-    window.addEventListener('mousemove', e => {
-      this.lastMouseX = e.clientX;
-      this.lastMouseY = e.clientY;
+    // safety net, reset the cursor if the mouse leaves the canvas
+    this.container.addEventListener('mouseleave', () => {
+      if (this.isRMBPanning) {
+        this.isRMBPanning = false;
+        this.container.style.cursor = this.defaultCursor;
+      }
     });
+
+    window.addEventListener('contextmenu', (e) => e.preventDefault()); // extra safety
 
     // Listen for keydown and keyup events.
     window.addEventListener('keydown', (event) => {
@@ -377,10 +472,12 @@ export class Game {
       // Spells: 1 = turret, 2 = molotov (you can expand to 3, 4 later)
       switch (event.code) {
         case 'Digit1':
+          this.cancelActiveDrag();
           this.ui.onStartTurretDrag?.();
           this.simulatePointerMoveAtMouse(); // trigger ghost placement
           break;
         case 'Digit2':
+          this.cancelActiveDrag();
           this.ui.onStartMolotovDrag?.();
           this.simulatePointerMoveAtMouse();
           break;
@@ -396,12 +493,40 @@ export class Game {
       this.input[event.code] = false;
     });
 
+    /* ───── Mouse-wheel zoom ───────────────────────────────────── */
+    /*  Aim: keep the same elevation angle ➜  scale distance & height together */
+
+    // values you already have
+    this.zoomMin  = 1;   // 0.5  → world looks bigger (zoom-in)
+    this.zoomMax  = 2.0;   // 2.0  → world looks smaller (zoom-out)
+    this.zoomStep = 0.85;  // wheel “notch” scale
+
+    this.container.addEventListener('wheel', e => {
+      e.preventDefault();
+
+      const dir    = Math.sign(e.deltaY);           // -1 up   (zoom-in)
+                                                    //  1 down (zoom-out)
+      const factor = dir < 0 ? this.zoomStep : 1 / this.zoomStep;
+
+      // clamp zoom so it never goes outside the limits
+      this.camera.zoom = THREE.MathUtils.clamp(
+        this.camera.zoom * factor,
+        this.zoomMin,
+        this.zoomMax
+      );
+
+      this.camera.updateProjectionMatrix();         // <-- IMPORTANT
+    });
+
 
     /* ---------- DRAG-TO-PLACE TURRET ---------------------------------- */
+    this.turretPrefab     = null;   // loaded once, then cloned for the ghost
+
     this.ui.onStartTurretDrag = () => {
       if (this.turretTokens <= 0) {
         return;
       }
+      this.cancelActiveDrag();
       /* 1. create the little icon that follows the cursor (UI only) */
       const img = this.ui.turretBtn.cloneNode();
       img.style.cssText = `
@@ -480,7 +605,7 @@ export class Game {
         );
         this.turrets.push(turret);
 
-        this.addTurretToken(-1);              // 🔻 spend one token & refresh badge
+        this.addTurretToken(-1);              // spend one token & refresh badge
       }
 
       /* clean up */
@@ -494,7 +619,7 @@ export class Game {
     /* ---------- DRAG-TO-PLACE MOLOTOV -------------------------------- */
     this.ui.onStartMolotovDrag = () => {
       if (this.molotovTokens <= 0) return;
-
+      this.cancelActiveDrag();
       /* tiny cursor ghost – reuse turret icon style */
       const img = this.ui.molotovBtn.cloneNode();
       img.style.cssText = `
@@ -562,15 +687,13 @@ export class Game {
     });
     /* ----------------------------------------------------------------- */
 
-
-
     this.ui.onToggleCameraFollow = () => {
       this.cameraFollow = !this.cameraFollow;
-    
+      
       if (!this.cameraFollow) {
         /* turning FOLLOW → FIXED
-           remember the spot where we’ll keep looking,
-           and stop the spring motion */
+            remember the spot where we’ll keep looking,
+            and stop the spring motion */
         this.fixedCameraCenter.copy(this.player.mesh.position);
         this.cameraVel.set(0, 0, 0);
       }
@@ -582,10 +705,27 @@ export class Game {
     };
   }
 
+  cancelActiveDrag() {
+    /* ─ Turret drag ─ */
+    if (this.draggingTurret) {
+      this.scene.remove(this.draggingTurret.ghost);
+      document.body.removeChild(this.draggingTurret.img);
+      this.draggingTurret = null;
+    }
+    /* ─ Molotov drag ─ */
+    if (this.draggingMolotov) {
+      this.scene.remove(this.draggingMolotov.ghost);
+      this.draggingMolotov.ghost.geometry?.dispose?.();
+      this.draggingMolotov.ghost.material?.dispose?.();
+      document.body.removeChild(this.draggingMolotov.img);
+      this.draggingMolotov = null;
+    }
+  }
+
   simulatePointerMoveAtMouse() {
     const evt = new PointerEvent('pointermove', {
-      clientX: this.lastMouseX ?? window.innerWidth / 2,
-      clientY: this.lastMouseY ?? window.innerHeight / 2
+      clientX: this.panPrev.x,
+      clientY: this.panPrev.y
     });
     window.dispatchEvent(evt);
   }
@@ -668,7 +808,6 @@ export class Game {
     const dropChance = 0.2; // 20% chance to drop a heart
     const turretChance = 0.05 // 5% chance to drop a turret token
     if (Math.random() < dropChance) {
-      //console.log("💖 Spawning heart at", enemy.mesh.position);
       const heart = new HeartPickup(enemy.mesh.position.clone(), this.player);
       this.pickups.push(heart);
       this.scene.add(heart.mesh);
@@ -698,7 +837,6 @@ export class Game {
   activateBulletHell() {
     this.bulletHellActive = true;
     this.bulletHellTimer = this.bulletHellDuration;
-    console.log("BULLET HELL Activated!");
     this.ui.showFloatingMessage(
       "🔥 BULLET HELL! 🔥",
       this.player.mesh.position.clone(),
@@ -709,14 +847,12 @@ export class Game {
   activateUltraAutoBulletPowerup() {
     this.ultraAutoBulletPowerupActive = true;
     this.ultraAutoBulletPowerupTimer = this.ultraAutoBulletPowerupDuration;
-    console.log("Ultra Auto Bullet Powerup Activated!");
     this.ui.showFloatingMessage("⚡ Ultra Auto Bullet Powerup Activated!", this.player.mesh.position.clone());
   }  
 
   activateMegaAutoBulletPowerup() {
     this.megaAutoBulletPowerupActive = true;
     this.megaAutoBulletPowerupTimer = this.megaAutoBulletPowerupDuration;
-    console.log("Mega Auto Bullet Powerup Activated!");
     // Display a message on the screen.
     this.ui.showFloatingMessage("⚡ Mega Auto Bullet Powerup Activated!", this.player.mesh.position.clone());
   }
@@ -724,7 +860,6 @@ export class Game {
   activateAutoBulletPowerup() {
     this.autoBulletPowerupActive = true;
     this.autoBulletPowerupTimer = this.autoBulletPowerupDuration;
-    console.log("Auto Bullet Powerup Activated!");
     // Display a message on screen.
     this.ui.showFloatingMessage("⚡ Auto Bullet Powerup Activated!", this.player.mesh.position.clone());
     // Reset the auto bullet cooldown so that the burst fires immediately.
@@ -734,7 +869,6 @@ export class Game {
   activateKnifeSpeedPowerupThree() {
     this.knifeSpeedPowerupActive = true;
     this.knifeSpeedPowerupTimer = this.knifeSpeedPowerupDuration;
-    console.log("Knife Speed Powerup Activated!");
     // Display a message on screen.
     this.ui.showFloatingMessage("⚡ Knife Speed Powerup Activated!", this.player.mesh.position.clone());
   }
@@ -743,7 +877,6 @@ export class Game {
   activateAttackVelocityBuff() {
     this.attackVelocityBuffActive = true;
     this.attackVelocityBuffTimer = this.attackVelocityBuffDuration;
-    console.log("Attack velocity buff activated!");
     // Display a message on the screen.
     this.ui.showFloatingMessage("⚡ Knife Buff!", this.player.mesh.position.clone());
   }  
@@ -812,34 +945,37 @@ export class Game {
     // Pass the final multiplier to the player update.
     this.player.update(delta, this.input, this.cameraAngle, finalKnifeAttackSpeedMultiplier);
     
-    // Update the enemy spawner.
-    this.enemySpawner.update(delta);
+    if (this.enemySpawner) {
+      // Update the enemy spawner
+      console.log('enemy spawner ', this.enemySpawner);
+      this.enemySpawner.update(delta);
+      // Update each enemy and check for enemy attacks
+      for (let enemy of this.enemySpawner.enemies) {
+        console.log('enemy pathfinder ', enemy.pathfinder);
+        enemy.update(delta, this.camera);
 
-    // Update each enemy and check for enemy attacks
-    for (let enemy of this.enemySpawner.enemies) {
-      enemy.update(delta, this.camera);
-
-      if (enemy.isAttacking && enemy.attackAction) {
-        // Check if the attack animation has looped:
-        // If the current attack action time is less than the last recorded time,
-        // it means a new cycle has started.
-        if (enemy.attackAction.time < enemy.lastAttackCycleTime) {
+        if (enemy.isAttacking && enemy.attackAction) {
+          // Check if the attack animation has looped:
+          // If the current attack action time is less than the last recorded time,
+          // it means a new cycle has started.
+          if (enemy.attackAction.time < enemy.lastAttackCycleTime) {
+            enemy.hasDamaged = false;
+          }
+          enemy.lastAttackCycleTime = enemy.attackAction.time;
+      
+          // Define the coverage area for the enemy's attack.
+          const attackRange = 5; // Adjust this value as needed.
+          const distance = enemy.mesh.position.distanceTo(this.player.mesh.position);
+      
+          // If the player is within the attack range and damage hasn't been applied for this cycle:
+          if (distance < attackRange && !enemy.hasDamaged) {
+            this.player.takeDamage(1);
+            enemy.hasDamaged = true;
+          }
+        } else {
+          // Reset the damage flag when the enemy is not in attack state.
           enemy.hasDamaged = false;
         }
-        enemy.lastAttackCycleTime = enemy.attackAction.time;
-    
-        // Define the coverage area for the enemy's attack.
-        const attackRange = 5; // Adjust this value as needed.
-        const distance = enemy.mesh.position.distanceTo(this.player.mesh.position);
-    
-        // If the player is within the attack range and damage hasn't been applied for this cycle:
-        if (distance < attackRange && !enemy.hasDamaged) {
-          this.player.takeDamage(1);
-          enemy.hasDamaged = true;
-        }
-      } else {
-        // Reset the damage flag when the enemy is not in attack state.
-        enemy.hasDamaged = false;
       }
     }
 
@@ -913,7 +1049,7 @@ export class Game {
       
       if (this.bulletHellTimer <= 0) {
         this.bulletHellActive = false;
-        console.log("BULLET HELL expired.");
+        
       }
     } else if (this.ultraAutoBulletPowerupActive) {
       // --- Ultra Auto Bullet Powerup Logic (if not in bullet hell) ---
@@ -939,7 +1075,7 @@ export class Game {
       }
       if (this.ultraAutoBulletPowerupTimer <= 0) {
         this.ultraAutoBulletPowerupActive = false;
-        console.log("Ultra Auto Bullet Powerup expired.");
+        
       }
     } else if (this.megaAutoBulletPowerupActive) {
       // --- Mega Auto Bullet Powerup Logic ---
@@ -963,7 +1099,6 @@ export class Game {
       }
       if (this.megaAutoBulletPowerupTimer <= 0) {
         this.megaAutoBulletPowerupActive = false;
-        console.log("Mega Auto Bullet Powerup expired.");
       }
     } else if (this.autoBulletPowerupActive) {
       // --- Normal Auto Bullet Powerup Logic ---
@@ -983,7 +1118,6 @@ export class Game {
       }
       if (this.autoBulletPowerupTimer <= 0) {
         this.autoBulletPowerupActive = false;
-        console.log("Auto Bullet Powerup expired.");
       }
     }
 
@@ -1005,7 +1139,6 @@ export class Game {
       this.attackVelocityBuffTimer -= delta;
       if (this.attackVelocityBuffTimer <= 0) {
         this.attackVelocityBuffActive = false;
-        console.log("Attack velocity buff expired.");
         // Optionally, reset kill timestamps and autoBulletKillCount.
         this.killTimestamps = [];
         this.autoBulletKillCount = 0;
@@ -1052,7 +1185,6 @@ export class Game {
       this.input['KeyC'] = false;
     }
     
-
     // Position the camera based on follow mode.
     if (this.cameraFollow && this.player.mesh) {
       // // Follow mode: camera's position is offset from the player's position.
@@ -1111,7 +1243,6 @@ export class Game {
       this.attackVelocityBuffTimer -= delta;
       if (this.attackVelocityBuffTimer <= 0) {
         this.attackVelocityBuffActive = false;
-        console.log("Attack velocity buff expired.");
         // Optionally clear kill timestamps or reset them.
         this.killTimestamps = [];
       }
@@ -1122,7 +1253,6 @@ export class Game {
       this.knifeSpeedPowerupTimer -= delta;
       if (this.knifeSpeedPowerupTimer <= 0) {
         this.knifeSpeedPowerupActive = false;
-        console.log("Knife Speed Powerup expired.");
       }
     }
 

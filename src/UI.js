@@ -379,7 +379,6 @@ export class UI {
 
     this.setAvatar = (src)=>{     
       this.avatarImg.src = src; 
-      console.log('Avatar image set to:', src);
     };
 
 
