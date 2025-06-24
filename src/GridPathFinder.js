@@ -147,10 +147,10 @@ export class GridPathfinder {
     const goal  = this.worldToCell(goalW);
 
     console.log('Scene for highlights:', scene);
-    // if (scene) {
-    //   this.highlightCell(start, scene, 0x00ff00); // green = start
-    //   this.highlightCell(goal,  scene, 0xff0000); // red   = goal
-    // }
+    if (scene) {
+      this.highlightCell(start, scene, 0x00ff00); // green = start
+      this.highlightCell(goal,  scene, 0xff0000); // red   = goal
+    }
 
     console.log('Start cell:', start, 'Goal cell:', goal);
     if (!this.get(goal.x, goal.y)) { // goal blocked

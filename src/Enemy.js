@@ -15,12 +15,10 @@ export class Enemy {
     this.speed = 30;
     this.mass = 1;                   // tweak later
     this.velocity  = new THREE.Vector3(); // will hold knock-back & sliding
-    this.radius = 1;
+    this.radius = 0.2;
     this.isAttacking = false; // flag to track attack state
     this.hasDamaged = false;  // flag to track if damage was applied in current cycle
     this.lastAttackCycleTime = 0; // store last attack animation time for detecting a new loop
-
-    this.i = 0
 
     // Load a GLTF zombie model.
     this.mesh = new THREE.Group(); // Temporary placeholder until the model is loaded.
@@ -129,9 +127,14 @@ export class Enemy {
       this.nextWP = 0;
       this.goal = targetPos.clone();
 
-      // random value between 1.5 and 2, creating a random "jitter" to
-      // avoid all enemies to recalcutate at the exact same time
-      this.repathTimer = 1.5 + Math.random()*0.5;
+      // repath timer based on distance to target
+      // the farther the player, the less sensitive the path needs to be to small movements
+      const distSq = targetPos.distanceToSquared(this.goal ?? new THREE.Vector3());
+      const baseTime = 5.0;
+      const distFactor = THREE.MathUtils.clamp(distSq / 100, 0.5, 2.0);
+      // random value between 0.8 and 1.2, creating a random "jitter" to
+      // avoid all enemies to recalculate at the exact same time
+      this.repathTimer = baseTime * distFactor * (0.8 + Math.random() * 0.4);
     }
 
     // get current waypoint
@@ -153,7 +156,7 @@ export class Enemy {
       // smooth look at the waypoint
       // using lookAt will cause to have a hard snap-look
       // that looks bad
-      this.smooth_look_at(dir.clone().normalize(), delta);
+      this.smooth_look_at(dir.clone().normalize(), dist, delta);
 
       if (dist < 2.5) { // if we are 0.5 units away from the waypoint let's start moving to the next one
         this.nextWP++;
@@ -175,33 +178,10 @@ export class Enemy {
     return Math.atan2(dir.x, dir.z);
   }
 
-  smooth_look_at(dir, delta) {
+  smooth_look_at(dir, dist, delta) {
 
-    
-    ///////////////////////////////////////////////////////
-    /* Yaw-only Euler Lerp */
-
-    // const desiredYaw = this.yawFromDir(dir);
-    // const euler = new THREE.Euler().setFromQuaternion(this.mesh.quaternion);
-    // const currentYaw = euler.y;
-
-    // // shortest delta between angles
-    // let deltaYaw = desiredYaw - currentYaw;
-    // if (deltaYaw > Math.PI) deltaYaw -= 2*Math.PI;
-    // if (deltaYaw < -Math.PI) deltaYaw += 2*Math.PI;
-
-    // const turnSpeed = 5; // radians/sec
-    // const maxTurn = turnSpeed * delta;
-    // deltaYaw = THREE.MathUtils.clamp(deltaYaw, -maxTurn, maxTurn);
-
-    // // apply new yaw
-    // euler.y = currentYaw + deltaYaw;
-    // this.mesh.quaternion.setFromEuler(euler);
-
-    ///////////////////////////////////////////////////////
     /* Quaternion Slerp */
 
-    // Somewhere up top of your file
     const forward = new THREE.Vector3(0, 0, 1); 
 
     // Compute target quaternion to look along toWP
@@ -209,10 +189,11 @@ export class Enemy {
       .setFromUnitVectors(forward, dir);
 
     // Slerp from current to target, with a turnSpeed factor
-    const turnSpeed = 4; // tweak: higher = faster turn
+    // a turnSpeed of 1 rad/s means a full 180° turn takes 3 seconds: it can feel too
+    // sluggish when the player's close, so we branch in two cases:
+    const closeThreshold = 10;
+    const turnSpeed = dist < closeThreshold ? 4 : 1;
     this.mesh.quaternion.slerp(targetQuat, Math.min(1, delta * turnSpeed));
-
-    ///////////////////////////////////////////////////////
 
   }
 

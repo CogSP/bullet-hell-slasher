@@ -277,10 +277,10 @@ export class Game {
   initPathfinding() {
     // const mapCells = 200;             // 200×200 => 1000 m² if cell = 5 m
     // const cellSize = 5;               // world metres per cell
-    const mapCells = 100;
-    const cellSize = 5;
+    const mapCells = 250;
+    const cellSize = 2;
     this.pathfinder = new GridPathfinder(mapCells, mapCells, cellSize);
-    // this.pathfinder.showGrid(this.scene)
+    this.pathfinder.showGrid(this.scene)
 
     const padding = 0;
     for (const box of this.staticColliders) {
