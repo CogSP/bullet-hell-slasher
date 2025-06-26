@@ -65,7 +65,6 @@ export class GridPathfinder {
     const m = new THREE.Mesh(geo, mat);
     m.rotation.x = -Math.PI/2;           // lie flat
     m.position.set(worldCenter.x, 0.02, worldCenter.z);
-    console.log('Adding highlight cell at', m.position);
     scene.add(m);
 }
 
@@ -128,7 +127,6 @@ export class GridPathfinder {
 
   set(x, z, walkable) {
     if ( x < 0 || z < 0 || x >= this.sizeX || z >= this.sizeZ ) return;
-    console.log('Setting cell', x, z, 'to', walkable);
     this.grid[ z * this.sizeX + x ] = walkable;
   }
   get(x, z) {
@@ -141,20 +139,15 @@ export class GridPathfinder {
   // ───────────────────────────────────────────
   findPath(startW, goalW, scene) {
     
-    console.log('Finding path from', startW, 'to', goalW);
-    
     const start = this.worldToCell(startW);
     const goal  = this.worldToCell(goalW);
 
-    console.log('Scene for highlights:', scene);
-    if (scene) {
-      this.highlightCell(start, scene, 0x00ff00); // green = start
-      this.highlightCell(goal,  scene, 0xff0000); // red   = goal
-    }
+    // if (scene) {
+    //   this.highlightCell(start, scene, 0x00ff00); // green = start
+    //   this.highlightCell(goal,  scene, 0xff0000); // red   = goal
+    // }
 
-    console.log('Start cell:', start, 'Goal cell:', goal);
     if (!this.get(goal.x, goal.y)) { // goal blocked
-      console.warn('Goal is blocked:', goal);
       return [];
     }
 
@@ -204,13 +197,9 @@ export class GridPathfinder {
       }
       const ck = key(current);
 
-      console.log('Current node:', current, 'f(n):', cf);
-
       // if we reached the goal reorder the path
       if (current.equals(goal)) {
 
-        console.log('Reached goal');
-        
         // reconstruct
         const path = [];
         let cur = ck;
@@ -224,24 +213,24 @@ export class GridPathfinder {
           cur = came.get(cur);
         }
 
-        // ─── remove previous debug line ─────────────────────────────────
-        if (this._debugLine && scene) {
-          scene.remove(this._debugLine);
-          this._debugLine.geometry.dispose();
-          this._debugLine.material.dispose();
-          this._debugLine = null;
-        }
+        // // ─── remove previous debug line ─────────────────────────────────
+        // if (this._debugLine && scene) {
+        //   scene.remove(this._debugLine);
+        //   this._debugLine.geometry.dispose();
+        //   this._debugLine.material.dispose();
+        //   this._debugLine = null;
+        // }
 
-        // draw the path in the scene for debugging
-        if (scene && path.length) {
-          // lift it slightly off the ground so you can see it
-          const linePts = path.map(p => p.clone().setY(0.05));
-          const geo      = new THREE.BufferGeometry().setFromPoints(linePts);
-          const mat      = new THREE.LineBasicMaterial({ color: 0x00ffff });
-          const line     = new THREE.Line(geo, mat);
-          scene.add(line);
-          this._debugLine = line; // store for later removal
-        }
+        // // draw the path in the scene for debugging
+        // if (scene && path.length) {
+        //   // lift it slightly off the ground so you can see it
+        //   const linePts = path.map(p => p.clone().setY(0.05));
+        //   const geo      = new THREE.BufferGeometry().setFromPoints(linePts);
+        //   const mat      = new THREE.LineBasicMaterial({ color: 0x00ffff });
+        //   const line     = new THREE.Line(geo, mat);
+        //   scene.add(line);
+        //   this._debugLine = line; // store for later removal
+        // }
 
         return path.reverse();
       }

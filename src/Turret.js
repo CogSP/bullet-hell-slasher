@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { GLTFLoader } from 'https://cdn.jsdelivr.net/npm/three@0.150.1/examples/jsm/loaders/GLTFLoader.js';
 import { Bullet } from './Bullet.js';
+import { loadingMgr } from './LoadingMgr.js';
 
 export class Turret {
   constructor(pos, scene, spawner, bulletArray) {
@@ -16,7 +17,7 @@ export class Turret {
     this.scene.add(this.object);
 
     // Load the GLTF turret model
-    const loader = new GLTFLoader();
+    const loader = new GLTFLoader(loadingMgr);
     loader.load('assets/turret/scene.gltf', gltf => {
       const model = gltf.scene;
 

@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { loadingMgr } from './LoadingMgr.js';
 
 /* ───────────────────────── shaders (unchanged) ───────────────────────── */
 const _VS = `uniform float pointMultiplier;
@@ -105,7 +106,7 @@ function getParticles(params){
 
   /* --- material -------------------------------------------------------- */
   const uniforms={
-    diffuseTexture:{ value:new THREE.TextureLoader().load(PRESET.tex) },
+    diffuseTexture:{ value:new THREE.TextureLoader(loadingMgr).load(PRESET.tex) },
     pointMultiplier:{ value:window.innerHeight/(2*Math.tan(30*Math.PI/180)) }
   };
   const mat=new THREE.ShaderMaterial({

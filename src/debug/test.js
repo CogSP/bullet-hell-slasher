@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { GLTFLoader } from 'https://cdn.jsdelivr.net/npm/three@0.150.1/examples/jsm/loaders/GLTFLoader.js';
 import { OrbitControls } from 'https://cdn.jsdelivr.net/npm/three@0.150.1/examples/jsm/controls/OrbitControls.js';
+import { loadingMgr } from '../Game';
 
 
 // this files is used to screenshot the avatars and put them on the centre-HUD
@@ -40,7 +41,7 @@ const camera = new THREE.PerspectiveCamera(
 )
 
 // 3. load the model
-const gltf = await new GLTFLoader().loadAsync(
+const gltf = await new GLTFLoader(loadingMgr).loadAsync(
 'assets/player/low_poly_soldier/scene.gltf'
 );
 const model = gltf.scene;

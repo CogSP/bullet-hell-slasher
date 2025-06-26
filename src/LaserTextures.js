@@ -1,7 +1,8 @@
 // LaserTextures.js  (place somewhere in /src/)
 import * as THREE from 'three';
+import { loadingMgr } from './LoadingMgr.js';
 
-const loader = new THREE.TextureLoader();
+const loader = new THREE.TextureLoader(loadingMgr);
 const names  = [  
   'laserBlue01.png', 'laserBlue02.png', 'laserBlue03.png', 'laserBlue04.png', 'laserBlue05.png', 'laserBlue06.png', 'laserBlue07.png', 'laserBlue08.png', 
   'laserBlue09.png', 'laserBlue10.png', 'laserBlue11.png', 'laserBlue12.png', 'laserBlue13.png', 'laserBlue14.png', 'laserBlue15.png', 'laserBlue16.png',   

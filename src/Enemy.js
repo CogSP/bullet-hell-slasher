@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { GLTFLoader } from 'https://cdn.jsdelivr.net/npm/three@0.150.1/examples/jsm/loaders/GLTFLoader.js';
+import { loadingMgr } from './LoadingMgr.js';
 
 export class Enemy {
   constructor(scene, player, staticColliders, pathfinder, mass = 1) {
@@ -26,7 +27,7 @@ export class Enemy {
     this.walkAction = null;
     this.attackAction = null;
 
-    const loader = new GLTFLoader();
+    const loader = new GLTFLoader(loadingMgr);
     // https://www.fab.com/listings/733760dc-83ac-483e-a75b-223c8a36be97
     loader.load('assets/zombie_commoner/scene.gltf', (gltf) => {
       gltf.scene.scale.set(0.05, 0.05, 0.05);
@@ -64,14 +65,16 @@ export class Enemy {
     });
     
 
+    // Old code: the spawner now decides the position,
+    // so we don't set the position here.
     // Set an initial spawn position (adjust as needed).
-    const spawnDistance = 40;
-    const angle = Math.random() * Math.PI * 2;
-    this.mesh.position.set(
-      Math.cos(angle) * spawnDistance,
-      0, // Adjust Y based on your model.
-      Math.sin(angle) * spawnDistance
-    );
+    // const spawnDistance = 40;
+    // const angle = Math.random() * Math.PI * 2;
+    // this.mesh.position.set(
+    //   Math.cos(angle) * spawnDistance,
+    //   0, // Adjust Y based on your model.
+    //   Math.sin(angle) * spawnDistance
+    // );
 
     // --- Health Bar Creation ---
     // (Existing health bar code here)
@@ -123,7 +126,6 @@ export class Enemy {
     // refresh the path every 1-2 s, or when the target moved a lot
     if (this.repathTimer <= 0 || targetPos.distanceToSquared(this.goal ?? new THREE.Vector3()) > 25) {
       this.path = this.pathfinder.findPath(this.mesh.position, targetPos, this.scene);
-      console.log('New path:', this.path);
       this.nextWP = 0;
       this.goal = targetPos.clone();
 
@@ -141,15 +143,11 @@ export class Enemy {
     if (this.nextWP < this.path.length) {
       const wp = this.path[this.nextWP];
 
-      console.log('Current waypoint:', wp.clone());
-      console.log('Enemy position:', this.mesh.position.clone());
-
+      
       // 2. steer toward it
       const dir = wp.clone().sub(this.mesh.position);
       const dist = dir.length();
 
-      console.log('Direction to waypoint:', dir.clone());
-      console.log('Distance to waypoint:', dist);
       dir.y = 0; // flatten
       // dir.normalize();
 
@@ -160,16 +158,13 @@ export class Enemy {
 
       if (dist < 2.5) { // if we are 0.5 units away from the waypoint let's start moving to the next one
         this.nextWP++;
-        console.warn('Reached waypoint, moving to next:', this.nextWP);
       } else {
       
-        console.log('Steering towards waypoint:', wp.clone());
         dir.normalize();
 
         // Euler integration of acceleration
         this.velocity.addScaledVector(dir.multiplyScalar(this.speed), delta);
-        console.log('New velocity:', this.velocity.clone());
-
+        
       }
     }
   }

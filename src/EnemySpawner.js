@@ -1,4 +1,6 @@
+import * as THREE from 'three';
 import { Enemy } from './Enemy.js';
+
 
 export class EnemySpawner {
   constructor(scene, player, game, pathfinder) {
@@ -9,11 +11,11 @@ export class EnemySpawner {
 
     // Horde system
     this.currentWave = 1;
-    this.enemiesPerWave = 1;   // Base number of enemies in the first wave
+    this.enemiesPerWave = 10;   // Base number of enemies in the first wave
     //this.enemiesPerWave = 50000 // testing
     this.spawnedEnemies = 0;
     this.maxEnemiesInWave = this.enemiesPerWave;
-    this.spawnInterval = 0.5; // 10000000 
+    this.spawnInterval = 0.5;//100000000000 //0.5; // 10000000 
     this.spawnTimer = 0;
     this.game = game;
 
@@ -31,12 +33,20 @@ export class EnemySpawner {
 
       if (this.spawnedEnemies < this.maxEnemiesInWave && this.spawnTimer >= this.spawnInterval) {
         this.spawnTimer = 0;
+
+        const spawnPos = this.getFreeSpawnPosition(this.game.staticColliders, 1.0);
+        if (!spawnPos) return; // No free spawn position found
+
         const enemy = new Enemy(
           this.scene,
           this.player, 
           this.game.staticColliders,
           this.pathfinder
         );
+
+        // the spawner decides the position
+        enemy.mesh.position.copy(spawnPos);
+
         this.enemies.push(enemy);
         this.scene.add(enemy.mesh);
         this.spawnedEnemies++;
@@ -86,4 +96,33 @@ export class EnemySpawner {
       this.score += 10;
     }
   }
+
+  getFreeSpawnPosition (colliders, radius = 1, maxTry = 40) {
+
+    const mapHalf = 240;              // your ground is 500×500 → ±250
+    const tmpBox  = new THREE.Box3(); // reused each loop
+
+    for (let i = 0; i < maxTry; i++) {
+
+      // pick a random point somewhere on the map (— tweak as you like)
+      const pos = new THREE.Vector3(
+        THREE.MathUtils.randFloatSpread(mapHalf * 2),
+        0,
+        THREE.MathUtils.randFloatSpread(mapHalf * 2)
+      );
+
+      // build a little AABB around that point (Y just needs to cover zombies)
+      tmpBox.setFromCenterAndSize(
+        pos,
+        new THREE.Vector3(radius * 2, 4, radius * 2)
+      );
+
+      // collide with every static obstacle
+      const hit = colliders.some(b => b.intersectsBox(tmpBox));
+      if (!hit) return pos;           // success!
+    }
+
+    return null;                      // gave up – map is probably full
+  }
+
 }

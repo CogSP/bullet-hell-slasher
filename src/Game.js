@@ -9,12 +9,14 @@ import { Turret } from './Turret.js';
 import { GridPathfinder } from './GridPathfinder.js';
 import { RGBELoader } from 'https://cdn.jsdelivr.net/npm/three@0.150.1/examples/jsm/loaders/RGBELoader.js';
 import { GLTFLoader } from 'https://cdn.jsdelivr.net/npm/three@0.150.1/examples/jsm/loaders/GLTFLoader.js';
+import { loadingMgr } from './LoadingMgr.js';
 
 export class Game {
   
   constructor(container) {
 
     this.container = container;
+    this._firstFrameDone = false;
 
     this.initScene();
     this.initCamera();
@@ -24,13 +26,17 @@ export class Game {
     // Data structures for static models
     this.staticColliders = [];
 
+    this.playerSpawnPos = new THREE.Vector3(0, 0, 0); // actually the player is at y = 1.5 but it's the same
+    this.reservedRadius   = 60;                          // metres of clearance
+    this.reservedRadiusSq = this.reservedRadius ** 2;   // save a sqrt later
+
     // Load all static models, then initialize pathfinding + spawner
     this.loadStaticModels().then(() => {
       this.initPathfinding();
       this.initEnemySpawner();
       this.start();
     });
-    
+
     // TODO: I AM GONNA REMOVE THE POWERUP AND TRANSFORM THEM IN SOMETHING ELSE
 
     // Array to hold active bullets.
@@ -79,7 +85,6 @@ export class Game {
     
     this.initGameState();
     this.registerEventListeners();
-
   }
 
   initScene() {
@@ -88,7 +93,7 @@ export class Game {
     this.scene.background = new THREE.Color(0x202020);
 
     /* ---------- PBR cobblestone ground ---------- */
-    const texLoader = new THREE.TextureLoader();
+    const texLoader = new THREE.TextureLoader(loadingMgr);
 
     const gColor  = texLoader.load('assets/ground/pbr/ground_albedo.jpg');
     const gNormal = texLoader.load('assets/ground/pbr/ground_normal.png');
@@ -122,7 +127,8 @@ export class Game {
 
     // Create a large plane geometry for the ground (e.g., 1000 x 1000 units)
     //const groundGeometry = new THREE.PlaneGeometry(1000, 1000);
-    const groundGeometry = new THREE.PlaneGeometry(500, 500);
+    //const groundGeometry = new THREE.PlaneGeometry(500, 500);
+    const groundGeometry = new THREE.PlaneGeometry(1000, 1000);
 
     const groundMesh = new THREE.Mesh(groundGeometry, groundMaterial);
     groundMesh.rotation.x = -Math.PI / 2; // Make the plane horizontal.
@@ -194,11 +200,22 @@ export class Game {
 
   async loadStaticModels() {
     await this.loadStaticBarn();
+    await this.loadStaticFarm();
+    await this.loadStaticTrees();
+    await this.loadStaticVehicles();
+    // // random spawning afterwards
+    await this.loadStaticRocks();
+    await this.loadStaticFences();
+
+    // force shader compilation so everything is ready for the first frame
+    this.renderer.compile(this.scene, this.camera);
+    // tell LoadingMgr we’re truly ready
+    window.dispatchEvent(new Event('first-render-complete'));
   }
 
   async loadStaticBarn() {
 
-    const gltfLoader = new GLTFLoader().setPath('assets/barn/modular_old_wooden_barn_and_fence/'); // base path
+    const gltfLoader = new GLTFLoader(loadingMgr).setPath('assets/barn/modular_old_wooden_barn_and_fence/'); // base path
     const gltf = await gltfLoader.loadAsync('scene.gltf');
 
     const barnRoot = gltf.scene;
@@ -213,7 +230,7 @@ export class Game {
     });
 
     /* Position / scale to taste */
-    barnRoot.position.set(100, 0, 50);
+    barnRoot.position.set(110, 0, -90);
     barnRoot.rotation.y = Math.PI;          // turn 180° if door faces away
     barnRoot.scale.setScalar(30);          // % of the original size
 
@@ -223,7 +240,7 @@ export class Game {
 
 
     const texPath = 'assets/barn/modular_old_wooden_barn_and_fence/textures/';
-    const tex     = new THREE.TextureLoader();
+    const tex     = new THREE.TextureLoader(loadingMgr);
 
     const tBase   = tex.load(texPath + 'MI_wooden_fence_barn_baseColor.png');
     const tMR     = tex.load(texPath + 'MI_wooden_fence_barn_metallicRoughness.png');
@@ -274,13 +291,343 @@ export class Game {
     }); 
   }
 
+  async loadStaticTrees () {
+
+    const gltf = await new GLTFLoader(loadingMgr)
+          .setPath('assets/100_random_low-poly_trees/')
+          .loadAsync('scene.gltf');
+
+    /* ------------------------------------------------------------------ */
+    /*  1. prepare the *template* just once                               */
+    /* ------------------------------------------------------------------ */
+    const template = gltf.scene;
+    template.scale.setScalar(3);
+    template.traverse(o=>{
+      if (o.isMesh){
+        o.castShadow = o.receiveShadow = true;
+        o.material.toneMapped = false;
+      }
+    });
+
+    /* 2. measure it */
+    template.updateWorldMatrix(true, true);
+    const localBBox = new THREE.Box3().setFromObject(template);
+    const size      = new THREE.Vector3().subVectors(localBBox.max, localBBox.min);
+
+    /* our play-field is –250 … +250 in both X and Z                      */
+    const mapHalf = 250;
+
+    /* helper that clones, moves, *records a collider* and adds to scene  */
+    const addForestWall = (pos, rotY)=>{
+        const clone = template.clone(true);
+        clone.position.copy(pos);
+        clone.rotation.y = rotY || 0;
+        this.scene.add(clone);
+
+        /* collider ------------------------------------------------------ */
+        const box = new THREE.Box3().setFromObject(clone).expandByScalar(0.5);
+        this.staticColliders.push(box);
+    };
+
+    //create an helper
+    // const axes = new THREE.AxesHelper(50);
+    // this.scene.add(axes);
+
+    /* ------------------------------------------------------------------ */
+    /* 3. four walls                                                      */
+    /* ------------------------------------------------------------------ */
+
+    // south
+    addForestWall(
+        new THREE.Vector3(-mapHalf - localBBox.min.x, 0, mapHalf - localBBox.min.x),
+        0);
+
+
+    addForestWall(
+        new THREE.Vector3(mapHalf - localBBox.max.x, 0, mapHalf - localBBox.min.x),
+        0);
+
+
+    // north
+    addForestWall(
+        new THREE.Vector3(-mapHalf - localBBox.min.x, 0, 2*(- mapHalf + localBBox.min.x)),
+        0);
+        
+    addForestWall(
+        new THREE.Vector3(mapHalf - localBBox.max.x, 0, 2*(- mapHalf + localBBox.min.x)),
+        0);
+
+    // west
+    addForestWall(
+        new THREE.Vector3(-2*mapHalf - localBBox.min.x, 0, -mapHalf - localBBox.min.x),
+        0);
+
+    addForestWall(
+        new THREE.Vector3(-2*mapHalf - localBBox.min.x, 0,  mapHalf - localBBox.max.x),
+        0);
+
+    // east
+    addForestWall(
+        new THREE.Vector3(2*mapHalf - localBBox.max.x, 0, -mapHalf - localBBox.min.x),
+        0);
+
+    addForestWall(
+        new THREE.Vector3(2*mapHalf - localBBox.max.x, 0,  mapHalf - localBBox.max.x),
+        0);
+
+
+    // south east corner
+    addForestWall(
+        new THREE.Vector3(-2*mapHalf, 0, mapHalf - localBBox.min.x),
+        0);
+
+    // south west corner
+    addForestWall(
+        new THREE.Vector3(mapHalf, 0, mapHalf),
+        0);
+
+    // north west corner
+    addForestWall(
+        new THREE.Vector3(mapHalf, 0, -2*mapHalf),
+        0);
+
+    // north east corner
+    addForestWall(
+        new THREE.Vector3(-2*mapHalf, 0, -2*mapHalf),
+        0);
+
+
+  }
+
+  async loadStaticFarm () {
+    const gltf = await new GLTFLoader(loadingMgr)
+          .setPath('assets/farm/')
+          .loadAsync('scene.gltf');
+
+    const root = gltf.scene;
+    root.scale.setScalar(10);            // tune size
+    root.position.set(50, 0, 30);      // pick a clear spot
+    root.traverse(o => {
+      if (o.isMesh) {
+        o.castShadow = o.receiveShadow = true;
+        o.material.toneMapped = false;
+      }
+    });
+
+    this.scene.add(root);
+    // (optional) add a collider:
+    this.staticColliders.push(new THREE.Box3().setFromObject(root));
+  }
+
+
+  async loadStaticVehicles () {
+
+    const loadTemplate = async (folder, file) =>
+      (await new GLTFLoader(loadingMgr).setPath(folder).loadAsync(file)).scene;
+
+    /* load both prefabs once */
+    const carTemplate = await loadTemplate(
+      'assets/car_apocalyptic_free_gameready_pbr_lowpoly_model/','scene.gltf');
+    const vanTemplate = await loadTemplate(
+      'assets/van_realistic_abandoned_pbr_low_poly/',        'scene.gltf');
+
+    /* tidy defaults shared by both prefabs */
+    const prep = (obj)=>obj.traverse(o=>{
+      if (o.isMesh){
+        o.castShadow = o.receiveShadow = true;
+        o.material.toneMapped = false;
+      }
+    });
+    prep(carTemplate); prep(vanTemplate);
+
+    /* internal util ---------------------------------------------------- */
+    const placeAt = (template, pos, scale, rotation)=>{
+      const clone = template.clone(true);
+      clone.scale.setScalar(scale);
+      clone.rotation.y = rotation ?? Math.random() * Math.PI * 2; // random heading is fine if rotation is not specified
+      clone.position.copy(pos);
+
+      /* collision safety check */
+      const tmpBox = new THREE.Box3().setFromObject(clone);
+      const farFromPlayer = pos.clone().setY(0)
+                            .distanceToSquared(this.playerSpawnPos) >
+                            this.reservedRadiusSq;
+      const overlaps = !farFromPlayer ||
+                      this.staticColliders.some(b=>b.intersectsBox(tmpBox));
+      if (overlaps) return console.warn('Vehicle skipped – overlaps something',pos);
+
+      this.scene.add(clone);
+      this.staticColliders.push(tmpBox.clone());
+    };
+
+    const CAR_SPAWNS = [
+      new THREE.Vector3(80, 0, -60),
+    ];
+
+    const VAN_SPAWNS = [
+      new THREE.Vector3(160, 0, -60),
+    ];
+
+    // // add a simple XYZ axis gizmo in one corner
+    // const axes = new THREE.AxesHelper(50);
+    // this.scene.add(axes);
+
+    // // draw a 10×10 ground grid every 10 m
+    // const grid = new THREE.GridHelper(500, 50);
+    // this.scene.add(grid);
+
+
+    /* ---- actually place them ---------------------------------------- */
+    CAR_SPAWNS.forEach(p => placeAt(carTemplate, p, 4, -90));
+    VAN_SPAWNS.forEach(p => placeAt(vanTemplate, p, 5, -90));
+  }
+
+  async loadStaticRocks () {
+    // ───── load the source mesh once ───────────────────────────────────
+    const gltfLoader = new GLTFLoader(loadingMgr)
+      .setPath('assets/rock/free_pack_-_rocks_stylized/');
+    const { scene: rockTemplate } = await gltfLoader.loadAsync('scene.gltf');
+
+    /* nicer defaults */
+    rockTemplate.traverse(o => {
+      if (o.isMesh) {
+        o.castShadow = true;
+        o.receiveShadow = true;
+        o.material.toneMapped = false;
+      }
+    });
+
+    // ───── parameters you can tweak ────────────────────────────────────
+    const rockCount    = 15;        // how many you want
+    const minScale     = 1;         // smallest rock
+    const maxScale     = 10;        // biggest rock
+    const mapHalfSize  = 250;       // ground is 500×500 → half-extent
+    const maxAttempts  = 40;        // tries per rock before we give up
+
+    // ───── helper so we do it once per loop - no GC churn ──────────────
+    const tmpBox = new THREE.Box3();
+
+    for (let n = 0; n < rockCount; n++) {
+
+      let placed = false;
+
+      // try several random positions until one fits
+      for (let attempt = 0; attempt < maxAttempts && !placed; attempt++) {
+
+        // 1. clone and randomise
+        const rock = rockTemplate.clone(true);
+
+        // const s = THREE.MathUtils.lerp(minScale, maxScale, Math.random()); // this is uniformly distributed
+        
+        // to bias the scale towards smaller rocks
+        // the distribution stays in [0, 1] but spends a lot more time near 0 with the cube
+        const t = Math.random() ** 3;                // 0‥1 but biased to 0
+        const s = THREE.MathUtils.lerp(minScale, maxScale, t);
+        rock.scale.setScalar(s);
+        rock.rotation.y = Math.random() * Math.PI * 2;
+
+        rock.position.set(
+          THREE.MathUtils.randFloatSpread(mapHalfSize * 2), // x: −250‥250
+          0,
+          THREE.MathUtils.randFloatSpread(mapHalfSize * 2)  // z: −250‥250
+        );
+
+        // 2. compute its bounding box in world space
+        rock.updateWorldMatrix(true, true);
+        tmpBox.setFromObject(rock);
+
+        // keep clear of the player spawn pad
+        const clearOfPlayer = rock.position.clone().setY(0).distanceToSquared(this.playerSpawnPos) > this.reservedRadiusSq;
+
+        const overlapsSomething = !clearOfPlayer || this.staticColliders.some(b => b.intersectsBox(tmpBox));
+
+        if (!overlapsSomething) {
+          this.scene.add(rock);
+          this.staticColliders.push(tmpBox.clone());
+          placed = true;
+        }
+
+        // if (!overlaps) {
+        //   // success!  finalise this rock
+        //   this.scene.add(rock);
+        //   // store a *copy* of the box so tmpBox can be reused next loop
+        //   this.staticColliders.push(tmpBox.clone());
+        //   placed = true;
+        // }
+        // else: discard and retry
+      }
+      // (optional) you could log if a rock couldn’t be placed after many tries
+    }
+  }
+
+  async loadStaticFences () {
+
+    const gltfLoader = new GLTFLoader(loadingMgr)
+        .setPath('assets/old_fence/');            // <-- your folder
+    const { scene: fenceTemplate } =
+          await gltfLoader.loadAsync('scene.gltf');
+
+    /* nice defaults */
+    fenceTemplate.traverse(o=>{
+      if (o.isMesh){
+        o.castShadow = true;
+        o.receiveShadow = true;
+        o.material.toneMapped = false;
+      }
+    });
+
+    /* ─── parameters you can tweak ───────────────────────── */
+    const fenceCount   = 5;        // how many pieces
+    const fenceScale   = 8;         // **fixed** size multiplier
+    const mapHalfSize  = 250;       // same ground half-extent
+    const maxAttempts  = 40;        // tries per fence before giving up
+
+    const tmpBox = new THREE.Box3();
+
+    for (let n = 0; n < fenceCount; n++) {
+
+      let placed = false;
+
+      for (let attempt = 0; attempt < maxAttempts && !placed; attempt++) {
+
+        const fence = fenceTemplate.clone(true);
+
+        /* ---- fixed size & random orientation/position ---- */
+        fence.scale.setScalar(fenceScale);
+        fence.rotation.y = Math.random() * Math.PI * 2;
+        fence.position.set(
+          THREE.MathUtils.randFloatSpread(mapHalfSize * 2), // x
+          0,
+          THREE.MathUtils.randFloatSpread(mapHalfSize * 2)  // z
+        );
+
+        fence.updateWorldMatrix(true, true);
+        tmpBox.setFromObject(fence);
+
+        /* stay clear of player-spawn zone */
+        const clearOfPlayer =
+          fence.position.clone().setY(0)
+              .distanceToSquared(this.playerSpawnPos) > this.reservedRadiusSq;
+
+        const overlaps = !clearOfPlayer ||
+                        this.staticColliders.some(b => b.intersectsBox(tmpBox));
+
+        if (!overlaps) {
+          this.scene.add(fence);
+          this.staticColliders.push(tmpBox.clone());   // store copy
+          placed = true;
+        }
+      }
+    }
+  }
+
   initPathfinding() {
     // const mapCells = 200;             // 200×200 => 1000 m² if cell = 5 m
     // const cellSize = 5;               // world metres per cell
     const mapCells = 250;
     const cellSize = 2;
     this.pathfinder = new GridPathfinder(mapCells, mapCells, cellSize);
-    this.pathfinder.showGrid(this.scene)
+    // this.pathfinder.showGrid(this.scene)
 
     const padding = 0;
     for (const box of this.staticColliders) {
@@ -947,11 +1294,9 @@ export class Game {
     
     if (this.enemySpawner) {
       // Update the enemy spawner
-      console.log('enemy spawner ', this.enemySpawner);
       this.enemySpawner.update(delta);
       // Update each enemy and check for enemy attacks
       for (let enemy of this.enemySpawner.enemies) {
-        console.log('enemy pathfinder ', enemy.pathfinder);
         enemy.update(delta, this.camera);
 
         if (enemy.isAttacking && enemy.attackAction) {
@@ -1147,8 +1492,8 @@ export class Game {
 
    // Update the UI with health, score, wave *and* remaining turrets.
     this.ui.update(this.player.health,
-                   this.enemySpawner.score,
-                   this.enemySpawner.currentWave,
+                   this.enemySpawner?.score ?? 0,
+                   this.enemySpawner?.currentWave ?? 0,
                    this.turretTokens);
     // this.ui.updateStaminaBar((this.player.stamina / this.player.maxStamina) * 100);
 
@@ -1317,7 +1662,7 @@ export class Game {
 
     this.minimap.update(
       this.player,
-      this.enemySpawner.enemies,
+      this.enemySpawner?.enemies ?? [],
       this.pickups,
       this.cameraAngle
     );

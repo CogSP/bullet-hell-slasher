@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { GLTFLoader } from 'https://cdn.jsdelivr.net/npm/three@0.150.1/examples/jsm/loaders/GLTFLoader.js';
 import { AnimationUtils } from 'three';
 import { getParticles } from './getParticles.js';
+import { loadingMgr } from './LoadingMgr.js';
 
 export class Player {
   constructor(scene, gameCamera) {
@@ -29,7 +30,7 @@ export class Player {
     this.xp          = 0;         // current XP
     this.xpToNext    = 50;        // XP needed for Lv-up (first tier)
 
-    const loader = new GLTFLoader();
+    const loader = new GLTFLoader(loadingMgr);
     loader.load(
       'assets/player/low_poly_soldier/scene.gltf',
       (gltf) => {
