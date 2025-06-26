@@ -359,7 +359,7 @@ export class UI {
     /* — 3-5. empty slots — */
     for (let k = 3; k <= 5; k++) {
       const placeholder = document.createElement('img');
-      placeholder.src   = 'assets/ui/horde/horde_I.svg';   // a 48×48 grey frame
+      placeholder.src   = 'assets/ui/horde/empty.svg';   // a 48×48 grey frame
       placeholder.alt   = `Spell ${k}`;
       placeholder.classList.add('ui-btn');
       placeholder.style.opacity = '.25';
@@ -410,7 +410,7 @@ export class UI {
     /* horde icon, should show the wave number in Roman numbers */
     this.horde = document.createElement('img');
     this.horde.className = 'horde';
-    this.horde.src = 'assets/ui/horde/horde_I.svg';
+    this.horde.src = 'assets/ui/horde/empty.svg';
     this.centerHUD.appendChild(this.horde);
 
     /* ── map 1 → I, 2 → II … (extend if you have more waves) */
@@ -418,7 +418,7 @@ export class UI {
 
     /** change the horde badge to the correct Roman‐numeral svg */
     this.setHordeWave = (waveNum) => {
-      const r = romans[waveNum] ?? waveNum;          // fallback to the number
+      const r = romans[waveNum - 1] ?? waveNum;          // fallback to the number
       this.horde.src = `assets/ui/horde/horde_${r}.svg`;       // e.g. assets/ui/horde_IV.svg
     };
 

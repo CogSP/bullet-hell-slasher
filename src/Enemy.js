@@ -12,7 +12,7 @@ export class Enemy {
     this.path       = [];   // world-space way-points
     this.nextWP     = 0;    // index in the path
     this.maxHealth = 3;
-    this.health = 3;
+    this.health = 30;
     this.speed = 30;
     this.mass = 1;                   // tweak later
     this.velocity  = new THREE.Vector3(); // will hold knock-back & sliding

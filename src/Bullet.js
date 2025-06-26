@@ -33,15 +33,15 @@ function getTrailSprite(scene)
 
 export class Bullet {
   constructor(pos, dir, scene, {
-    speed        = 60, // this will influence the damage
+    speed        = 300, // this will influence the damage
     mass         = 0.05,
-    heightOffset = 4
+    heightOffset = 0
   } = {}) {
 
     /*―― basic physics ――*/
     this.mass     = mass;
     this.velocity = dir.clone().setLength(speed);
-    this.radius   = 0.35;
+    this.radius   = 5.35;
     this.alive    = true;
 
     /*―― core mesh (tiny cylinder) ――*/
@@ -98,7 +98,7 @@ export class Bullet {
   update(dt) {
     if (!this.alive) return;
 
-    this.velocity.addScaledVector(GRAVITY, dt);
+    //this.velocity.addScaledVector(GRAVITY, dt);
     this.mesh.position.addScaledVector(this.velocity, dt);
 
     if (this.mesh.position.lengthSq() > 40000) {

@@ -730,7 +730,7 @@ export class Game {
     window.addEventListener('resize', () => this.onWindowResize(), false);
 
     // Listen for mouse clicks to shoot.
-    this.container.addEventListener('click', (event) => this.onMouseClick(event));
+    //this.container.addEventListener('click', (event) => this.onMouseClick(event));
 
     this.isRMBPanning = false;        // are we currently panning? (RMB = Right Mouse Button)
     this.panPrev      = new THREE.Vector2(); // last mouse pos while panning
@@ -1353,11 +1353,11 @@ export class Game {
         }
       }
 
-      // Remove bullets that travel too far.
-      if (bullet.mesh.position.distanceTo(this.player.mesh.position) > 100) {
-        this.scene.remove(bullet.mesh);
-        this.bullets.splice(i, 1);
-      }
+      // // Remove bullets that travel too far.
+      // if (bullet.mesh.position.distanceTo(this.player.mesh.position) > 100) {
+      //   this.scene.remove(bullet.mesh);
+      //   this.bullets.splice(i, 1);
+      // }
     }
 
     // --- Auto Bullet Powerup Logic ---

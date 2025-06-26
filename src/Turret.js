@@ -5,9 +5,9 @@ import { loadingMgr } from './LoadingMgr.js';
 
 export class Turret {
   constructor(pos, scene, spawner, bulletArray) {
-    this.fireRate   = 2;   // shots/sec
-    this.range      = 250;  // firing radius
-    this.turnSpeed  = 4;   // radians/sec
+    this.fireRate   = 10;   // shots/sec
+    this.range      = 50000000;  // firing radius
+    this.turnSpeed  = 5;   // radians/sec
     this.cooldown   = 0;
     this.bulletArray = bulletArray;
     this.scene    = scene;
@@ -23,7 +23,7 @@ export class Turret {
 
       // OPTIONAL: scale and rotate to fit your world
       model.scale.set(1, 1, 1);
-      model.rotation.y = Math.PI + 60;
+      model.rotation.y = 2*Math.PI;
       
       /* 1. lift model so it rests on the ground ----------------------- */
       const box = new THREE.Box3().setFromObject(model);
@@ -49,7 +49,7 @@ export class Turret {
   update(dt) {
     // Find closest enemy
     let closest = null;
-    let closestDistSq = this.range * this.range;
+    let closestDistSq = this.range;
 
     for (const e of this.spawner.enemies) {
       const dSq = e.mesh.position.distanceToSquared(this.object.position);
@@ -85,7 +85,11 @@ export class Turret {
 
     // Fire
     this.cooldown -= dt;
-    if (angle < 0.15 && this.cooldown <= 0) {
+    if (
+      angle < 0.001 && 
+      this.cooldown <= 0 && 
+      closestDistSq < this.range
+    ) {
 
       const muzzlePos = this.muzzle.getWorldPosition(new THREE.Vector3());
       const muzzleDir = closest.mesh.position.clone().sub(muzzlePos).normalize();
