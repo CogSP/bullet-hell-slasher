@@ -92,7 +92,7 @@ function createText({ font, message }) {
   const glassMat = new THREE.MeshPhysicalMaterial({
     roughness: 0.5,
     transmission: 5.0,
-    transparent: true,
+    transparent: false,
     thickness: 10.0,
   });
   const textMesh = new THREE.Mesh(textGeo, glassMat);

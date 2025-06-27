@@ -54,19 +54,21 @@ window.addEventListener(
 let maxPct = 0;
 loadingMgr.onProgress = (_, loaded, total) => {
   const pct = Math.round((loaded / total) * 100);
-  if (pct > maxPct) {
-    maxPct = pct;
-    // loadingDiv.textContent = `Loading… ${pct} %`;
-    // currentPct = pct;
-    // if (scrn) scrn.setProgress(pct);
-    currentPct = pct;
-    if (scrn) scrn.setProgress(pct);
-  }
-};
+
+  if (pct < maxPct) return;
+
+  console.log('maxPct', maxPct, 'pct', pct);
+  maxPct = pct;
+  if (scrn) {
+    scrn.setProgress(pct);
+    console.log('Loading progress:', pct, '%');
+  } 
+}
 
 // Callback
 loadingMgr.onLoad = () => {
   assetsReady = true;
+  scrn.setProgress(100);  // set to 100% when all assets are loaded
   tryFinish();                 // might finish now, or wait for first frame
 };
 

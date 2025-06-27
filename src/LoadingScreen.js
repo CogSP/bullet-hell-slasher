@@ -38,7 +38,7 @@ function createOutline(font, message) {
         const mesh = new Line2(geo, mat);
         mesh.computeLineDistances();
         let offset = i * 0;
-        mesh.userData.update = (t) => { mesh.material.dashOffset = t * (totalDist*0.1) + offset; };
+        mesh.userData.update = (t) => { mesh.material.dashOffset = t * (totalDist*0.25) + offset; };
         return mesh;
     }
 
@@ -54,7 +54,7 @@ function createOutline(font, message) {
     //strokeGroup.userData.update = t => strokeGroup.children.forEach(c => c.userData.update(t));
     strokeGroup.update = (t, i) => {
         strokeGroup.children.forEach((c) => {
-        c.userData.update?.(t);
+            c.userData.update?.(t);
         });
     };
     return strokeGroup;
@@ -76,7 +76,9 @@ export function makeLoadingScreen(msg = 'Loading...') {
     // declare holders so outer scope can access them
     let outline      = null;
     let pctGroup     = null;
-    let rebuildPercent = () => {};     // will be replaced later
+    let rebuildPercent = () => {
+        console.warn('rebuildPercent() called before font is ready');
+    }; // will be replaced later
 
     /* ---------- async part (font + meshes) -------------------------- */
     (async () =>
@@ -129,7 +131,8 @@ export function makeLoadingScreen(msg = 'Loading...') {
         pctGroup.position.x = xOff + baseWidth + gap;    // absolute world X position
         scene.add(pctGroup);
 
-        function rebuildPercent(p) {
+        rebuildPercent = function(p) {
+            console.log('rebuilding with percentage', p);
             /* dispose previous */
             pctGroup.children.forEach(c=>{
                 c.geometry?.dispose(); c.material?.dispose();
@@ -141,11 +144,11 @@ export function makeLoadingScreen(msg = 'Loading...') {
             const m     = new THREE.Mesh(g, txtMat.clone());
             pctGroup.add(m);
 
-            const o     = createOutline(font, label);
-            o.position.set(0,0,0.2);
-            pctGroup.add(o);
+            const outline = createOutline(font, label);
+            outline.position.set(0,0,0.2);
+            pctGroup.add(outline);
 
-            pctGroup.userData.update = t => o.update(t);
+            pctGroup.userData.update = t => outline.update(t);
         }
         rebuildPercent(pendingPct);
         ready = true;
@@ -179,7 +182,13 @@ export function makeLoadingScreen(msg = 'Loading...') {
 
     return { 
         canvas, update, resize,
-        setProgress : p  => { pendingPct = p; if (ready) rebuildPercent(p); },
-        dispose     : () => renderer.dispose() 
+        setProgress: p  => { 
+            pendingPct = p; 
+            if (ready) {
+                console.log('AAAAAAAAAAAAAAAAAAAA')
+                rebuildPercent(p);
+            }
+        },
+        dispose: () => renderer.dispose() 
     };
 }
