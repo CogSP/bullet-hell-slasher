@@ -1,6 +1,6 @@
 // LoadingMgr.js
 import * as THREE from 'three';
-
+import { makeLoadingScreen } from './LoadingScreen.js';
 
 /* ------------------------------------------------------------------ */
 /* 1) DOM overlay                                                     */
@@ -8,8 +8,23 @@ const loadingDiv = document.createElement('div');
 loadingDiv.style.cssText = `
   position:fixed; inset:0; display:flex; align-items:center; justify-content:center;
   background:#000; color:#fff; font:18px/1 Arial, sans-serif; z-index:9999;`;
-loadingDiv.textContent = 'Loading… 0 %';
+//loadingDiv.textContent = 'Loading… 0 %';
 document.body.appendChild(loadingDiv);
+
+// this will call the update() method of the loading screen
+// every frame
+function tick() {
+  if(!scrn) return;
+  scrn.update();
+  requestAnimationFrame(tick);
+}
+
+/* build the fancy WebGL title */
+let scrn = makeLoadingScreen('Loading');   // now returns object, not Promise
+let currentPct  = 0;
+loadingDiv.appendChild(scrn.canvas);              // canvas visible right away
+scrn.setProgress(currentPct);                     // in case loaders fire early
+tick();                                           // start its RAF loop
 
 /* ------------------------------------------------------------------ */
 /* Create the manager                            */
@@ -41,7 +56,11 @@ loadingMgr.onProgress = (_, loaded, total) => {
   const pct = Math.round((loaded / total) * 100);
   if (pct > maxPct) {
     maxPct = pct;
-    loadingDiv.textContent = `Loading… ${pct} %`;
+    // loadingDiv.textContent = `Loading… ${pct} %`;
+    // currentPct = pct;
+    // if (scrn) scrn.setProgress(pct);
+    currentPct = pct;
+    if (scrn) scrn.setProgress(pct);
   }
 };
 
@@ -52,3 +71,9 @@ loadingMgr.onLoad = () => {
 };
 
 export { loadingMgr };
+
+
+window.addEventListener('resize', ()=>
+{
+  if(scrn) scrn.resize(window.innerWidth, window.innerHeight);
+}, false);

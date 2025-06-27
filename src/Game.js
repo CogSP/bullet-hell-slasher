@@ -203,7 +203,7 @@ export class Game {
     await this.loadStaticFarm();
     await this.loadStaticTrees();
     await this.loadStaticVehicles();
-    // // random spawning afterwards
+    // random spawning afterwards
     await this.loadStaticRocks();
     await this.loadStaticFences();
 
@@ -688,10 +688,10 @@ export class Game {
             }
             else {
               // Knock-back impulse when the knife hits
-              const knockback = damage * 10;   // impulse magnitude
-              enemy.velocity.add(              // Δv = J / m
-                toEnemy.clone().multiplyScalar(knockback / enemy.mass)
-              );
+              // const knockback = damage * 10;   // impulse magnitude
+              // enemy.velocity.add(              // Δv = J / m
+              //   toEnemy.clone().multiplyScalar(knockback / enemy.mass)
+              // );
             }
           }
         }
@@ -1337,7 +1337,7 @@ export class Game {
         if (distance < collisionDistance) {
           // kinetic energy E = ½ m v²  (use v² = |v|² to avoid a sqrt) for bullet damage calculation
           const energy  = 0.5 * bullet.mass * bullet.velocity.lengthSq();
-          const baseDmg = energy * 0.08;           // 0.08 ⇒ ≈1 damage at 25 m/s & 0.05 kg
+          const baseDmg = energy * 0.02;
           const dmg     = bullet.damage ?? baseDmg; // if power-ups set bullet.damage, use that
           const enemyDead = enemy.takeDamage(dmg);
           if (enemyDead) {
@@ -1491,10 +1491,7 @@ export class Game {
     }
 
    // Update the UI with health, score, wave *and* remaining turrets.
-    this.ui.update(this.player.health,
-                   this.enemySpawner?.score ?? 0,
-                   this.enemySpawner?.currentWave ?? 0,
-                   this.turretTokens);
+    this.ui.update(this.enemySpawner?.currentWave ?? 0);
     // this.ui.updateStaminaBar((this.player.stamina / this.player.maxStamina) * 100);
 
     // Update camera based on input 

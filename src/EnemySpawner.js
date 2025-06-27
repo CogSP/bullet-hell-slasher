@@ -12,10 +12,9 @@ export class EnemySpawner {
     // Horde system
     this.currentWave = 1;
     this.enemiesPerWave = 10;   // Base number of enemies in the first wave
-    //this.enemiesPerWave = 50000 // testing
     this.spawnedEnemies = 0;
     this.maxEnemiesInWave = this.enemiesPerWave;
-    this.spawnInterval = 0.5;//100000000000 //0.5; // 10000000 
+    this.spawnInterval = 1;
     this.spawnTimer = 0;
     this.game = game;
 
@@ -67,25 +66,21 @@ export class EnemySpawner {
     }
   }
 
+
+  // NOTE: 
+  // Enemies should become stronger, faster and with more health at each wave
+  // but for the sake of the presentation, I use strongest enemies (wave 10)
+  // already from wave 1
   startNewWave() {
     this.spawnedEnemies = 0;
     this.maxEnemiesInWave = this.enemiesPerWave + this.currentWave * 3; // scale enemy count
-    this.spawnInterval = Math.max(0.2, 1.0 - this.currentWave * 0.05);   // faster spawn rate
+    this.spawnInterval = Math.max(0.2, 1.0 - this.currentWave * 0.1);   // faster spawn rate
     this.waveInProgress = true;
 
     // Optional: UI message
     if (this.player?.game?.ui?.showMessage) {
       this.player.game.ui.showMessage(`Wave ${this.currentWave} incoming!`, 2);
     }
-
-    this.game.addTurretToken(2);
-
-    // with probability 8% add a Molotov
-    const molotovChance = 0.08;
-    if(Math.random()<molotovChance){
-      this.addMolotovToken(1, enemy.mesh.position);
-    }
-
   }
 
   removeEnemy(enemy) {

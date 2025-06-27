@@ -11,8 +11,8 @@ export class Enemy {
     this.pathfinder = pathfinder;
     this.path       = [];   // world-space way-points
     this.nextWP     = 0;    // index in the path
-    this.maxHealth = 3;
-    this.health = 30;
+    this.maxHealth = 300;
+    this.health = 300;
     this.speed = 30;
     this.mass = 1;                   // tweak later
     this.velocity  = new THREE.Vector3(); // will hold knock-back & sliding
@@ -64,18 +64,6 @@ export class Enemy {
       console.error('Error loading GLTF model:', error);
     });
     
-
-    // Old code: the spawner now decides the position,
-    // so we don't set the position here.
-    // Set an initial spawn position (adjust as needed).
-    // const spawnDistance = 40;
-    // const angle = Math.random() * Math.PI * 2;
-    // this.mesh.position.set(
-    //   Math.cos(angle) * spawnDistance,
-    //   0, // Adjust Y based on your model.
-    //   Math.sin(angle) * spawnDistance
-    // );
-
     // --- Health Bar Creation ---
     // (Existing health bar code here)
     this.healthBarGroup = new THREE.Group();

@@ -5,9 +5,9 @@ import { loadingMgr } from './LoadingMgr.js';
 
 export class Turret {
   constructor(pos, scene, spawner, bulletArray) {
-    this.fireRate   = 10;   // shots/sec
+    this.fireRate   = 2;   // shots/sec
     this.range      = 50000000;  // firing radius
-    this.turnSpeed  = 5;   // radians/sec
+    this.turnSpeed  = 2;   // radians/sec
     this.cooldown   = 0;
     this.bulletArray = bulletArray;
     this.scene    = scene;

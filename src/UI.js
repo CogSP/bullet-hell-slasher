@@ -627,10 +627,13 @@ export class UI {
     this.hudRight.innerHTML = rightText;
   }
 
-  // fourth param is optional so existing calls won’t break
-  update(health, score, wave = null, turretTokens = null) {
-    if (wave != null) { 
-      this.setHordeWave(wave);
+  update(wave = null) {
+    if (wave != null) {
+      if (wave < 1) {
+        this.setHordeWave(1);
+      } else {
+        this.setHordeWave(wave);
+      }
     }
   }
 

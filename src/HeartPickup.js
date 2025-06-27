@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { getParticles } from './getParticles.js';
+// import { getParticles } from './getParticles.js';
 
 export class HeartPickup {
   constructor(position, player) {
@@ -29,20 +29,20 @@ export class HeartPickup {
     this.mesh.position.copy(position);
     this.mesh.position.y += 1.5; // Hover slightly
 
-    this.auraAnchor = new THREE.Object3D();
-    this.auraAnchor.position.set(0, 0.6, 0); // centre the ring on the heart
-    this.mesh.add(this.auraAnchor);
+    // this.auraAnchor = new THREE.Object3D();
+    // this.auraAnchor.position.set(0, 0.6, 0); // centre the ring on the heart
+    // this.mesh.add(this.auraAnchor);
 
-    this.aura = getParticles({
-      camera : this.camera,
-      emitter: this.auraAnchor,
-      parent : this.auraAnchor,
-      rate   : 500,                     
-      texture: 'src/img/circle.png',
-      mode   : 'aura',
-      bodyRadius: 0.4,
-      bodyHeight: 0.8,
-    });
+    // this.aura = getParticles({
+    //   camera : this.camera,
+    //   emitter: this.auraAnchor,
+    //   parent : this.auraAnchor,
+    //   rate   : 500,                     
+    //   texture: 'src/img/circle.png',
+    //   mode   : 'aura',
+    //   bodyRadius: 0.4,
+    //   bodyHeight: 0.8,
+    // });
   }
 
   /** stop the particle system and free GPU memory */

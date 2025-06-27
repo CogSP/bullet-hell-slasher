@@ -1,12 +1,10 @@
-// Molotov.js
 import * as THREE from 'three';
 import { getParticles } from './getParticles.js';
 
 export class Molotov {
     constructor (pos, scene, camera, game) {
-        /* editable knobs */
-        this.radius        = 8;          // burn area
-        this.damagePerSec  = 4;          // DPS to each enemy inside
+        this.radius        = 30;          // burn area
+        this.damagePerSec  = 150;          // DPS to each enemy inside
         this.lifetime      = 8;          // seconds fire lasts
         this.game          = game;       // Game instance to access enemies
         this.scene  = scene;
@@ -51,23 +49,33 @@ export class Molotov {
         /* burn all enemies currently inside radius */
         if (this.enemies) {
             for (let i = this.enemies.length - 1; i >= 0; i--) {
-            const e = this.enemies[i];
-            if (!e.mesh) continue;      // already removed elsewhere
-            if (e.mesh.position.distanceToSquared(centre) < rSq) {
-                const dead = e.takeDamage(this.damagePerSec * dt);
-                if (dead && this.game) {
+                const e = this.enemies[i];
+                if (!e.mesh) continue;
+
+
+                const distSq = e.mesh.position.distanceToSquared(centre);
+                if (distSq < rSq) {
+                    /* ---------- quadratic fall-off -------------------------------- */
+                    const dist = Math.sqrt(distSq);            // metres from centre
+                    const t    = 1 - dist / this.radius;       // 1 → centre, 0 → edge
+                    const dmg  = this.damagePerSec * t * t * dt;
+                    /* -------------------------------------------------------------- */
+
+                    const dead = e.takeDamage(dmg);
+                    if (dead && this.game) {
                     this.game.enemySpawner.removeEnemy(e);
                     this.game.registerEnemyKill(e);
+                    }
                 }
             }
+
+            /* expire */
+            if (this.timer >= this.lifetime) {
+                this.scene.remove(this.group);
+                this.fire = null;        // GC – Game will filter nulls
+                return true;             // “I’m done, remove me”
             }
-        /* expire */
-        if (this.timer >= this.lifetime) {
-            this.scene.remove(this.group);
-            this.fire = null;        // GC – Game will filter nulls
-            return true;             // “I’m dead, remove me”
-        }
-        return false;
+            return false;
         }
     }
 }
