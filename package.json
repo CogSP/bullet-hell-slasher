@@ -1,0 +1,20 @@
+{
+  "name": "rogue-like-ig",
+  "version": "1.0.0",
+  "description": "This project is a browser-based, single-player rogue-like game created for the \"Interactive Graphics\" (Sapienza University of Rome, a.y. 2025-2026) in Three.js.\r You fight waves of goblin using your knife, tools and powerup, trying to survive as long as you can. The project is built with vanilla **Three.js** ES-modules—no frameworks, no build step—just clone, serve, and play.",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/CogSP/rogue-like-ig.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/CogSP/rogue-like-ig/issues"
+  },
+  "homepage": "https://github.com/CogSP/rogue-like-ig#readme"
+}
