@@ -1,7 +1,7 @@
+// A simple A* on a 2-D boolean grid
 import * as THREE from 'three';
 
 export class GridPathFinder {
-  // A simple A* on a 2-D boolean grid
   /**
    * @param {number} sizeX   number of cells in X
    * @param {number} sizeZ   number of cells in Z
