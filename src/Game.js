@@ -6,7 +6,7 @@ import { Bullet } from './Bullet.js';
 import { HeartPickup } from './HeartPickup.js';
 import { Minimap } from './Minimap.js';
 import { Turret } from './Turret.js';
-import { GridPathfinder } from './GridPathfinder.js';
+import { GridPathFinder } from './GridPathFinder.js';
 import { RGBELoader } from 'https://cdn.jsdelivr.net/npm/three@0.150.1/examples/jsm/loaders/RGBELoader.js';
 import { GLTFLoader } from 'https://cdn.jsdelivr.net/npm/three@0.150.1/examples/jsm/loaders/GLTFLoader.js';
 import { loadingMgr } from './LoadingMgr.js';
@@ -626,7 +626,7 @@ export class Game {
     // const cellSize = 5;               // world metres per cell
     const mapCells = 250;
     const cellSize = 2;
-    this.pathfinder = new GridPathfinder(mapCells, mapCells, cellSize);
+    this.pathfinder = new GridPathFinder(mapCells, mapCells, cellSize);
     // this.pathfinder.showGrid(this.scene)
 
     const padding = 0;

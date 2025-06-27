@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 
-export class GridPathfinder {
+export class GridPathFinder {
   // A simple A* on a 2-D boolean grid
   /**
    * @param {number} sizeX   number of cells in X
