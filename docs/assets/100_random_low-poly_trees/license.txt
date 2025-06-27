@@ -1,0 +1,11 @@
+Model Information:
+* title:	100 Random Low-Poly Trees
+* source:	https://sketchfab.com/3d-models/100-random-low-poly-trees-6d57fe4ff8f14753859f480bc7465dcd
+* author:	Sereib (https://sketchfab.com/Sereib)
+
+Model License:
+* license type:	CC-BY-4.0 (http://creativecommons.org/licenses/by/4.0/)
+* requirements:	Author must be credited. Commercial use is allowed.
+
+If you use this 3D model in your project be sure to copy paste this credit wherever you share it:
+This work is based on "100 Random Low-Poly Trees" (https://sketchfab.com/3d-models/100-random-low-poly-trees-6d57fe4ff8f14753859f480bc7465dcd) by Sereib (https://sketchfab.com/Sereib) licensed under CC-BY-4.0 (http://creativecommons.org/licenses/by/4.0/)
