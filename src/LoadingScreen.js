@@ -70,6 +70,7 @@ export function makeLoadingScreen(msg = 'Loading...') {
     const h = window.innerHeight;
     const camera    = new THREE.PerspectiveCamera(75, w / h, 0.1, 1000);
     camera.position.z = 5;
+    camera.position.x = 1;
 
     let ready = false; // becomes true once the font is done
     let pendingPct = 0;
@@ -132,7 +133,6 @@ export function makeLoadingScreen(msg = 'Loading...') {
         scene.add(pctGroup);
 
         rebuildPercent = function(p) {
-            console.log('rebuilding with percentage', p);
             /* dispose previous */
             pctGroup.children.forEach(c=>{
                 c.geometry?.dispose(); c.material?.dispose();
@@ -185,7 +185,6 @@ export function makeLoadingScreen(msg = 'Loading...') {
         setProgress: p  => { 
             pendingPct = p; 
             if (ready) {
-                console.log('AAAAAAAAAAAAAAAAAAAA')
                 rebuildPercent(p);
             }
         },

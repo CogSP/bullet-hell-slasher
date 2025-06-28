@@ -17,6 +17,8 @@ export class Game {
 
     this.container = container;
     this._firstFrameDone = false;
+    this.isGameOver = false;
+    this.restartKey = 'KeyR';
 
     this.initScene();
     this.initCamera();
@@ -187,15 +189,16 @@ export class Game {
     this.renderer.shadowMap.enabled = true; // Enable shadows
     // Clock for delta time.
     this.clock = new THREE.Clock();
+    this.sessionStart = performance.now();
   }
 
   initLights() {
     // Setup lighting.
-    const ambientLight = new THREE.AmbientLight(0xffffff, 0.5);
-    this.scene.add(ambientLight);
-    const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
-    directionalLight.position.set(0, 50, 50);
-    this.scene.add(directionalLight);
+    this.ambientLight = new THREE.AmbientLight(0xffffff, 0.5);
+    this.scene.add(this.ambientLight);
+    this.directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
+    this.directionalLight.position.set(0, 50, 50);
+    this.scene.add(this.directionalLight);
   }
 
   async loadStaticModels() {
@@ -687,11 +690,24 @@ export class Game {
               this.registerEnemyKill(enemy);
             }
             else {
-              // Knock-back impulse when the knife hits
-              // const knockback = damage * 10;   // impulse magnitude
-              // enemy.velocity.add(              // Δv = J / m
-              //   toEnemy.clone().multiplyScalar(knockback / enemy.mass)
-              // );
+              const knockback = damage * 0.5;   // impulse magnitude
+              const knockbackDir = toEnemy.clone();
+              // this will ensure the knockback is purely horizontal
+              // this is needed because the player is higher than the enemy
+              // so when the he hits him the knockback has a vertical component
+              // however, I didn't implement the collision detection
+              // with the ground, so the enemy would have sunk
+              // under the ground mesh. 
+              // That means that this knockback is not respecting 100%
+              // the laws of physics, since we are arbitrarily removing
+              // the vertical component of the knockback direction. 
+              // However, it is a good approximation and no ones cares. 
+              knockbackDir.y = 0;
+              knockbackDir.normalize();
+
+              enemy.velocity.add( // Δv = J / m
+                knockbackDir.multiplyScalar(knockback / enemy.mass)
+              );
             }
           }
         }
@@ -816,6 +832,12 @@ export class Game {
     window.addEventListener('keydown', (event) => {
       this.input[event.code] = true;
 
+      /* Allow restart when the game is over */
+      if (this.isGameOver && event.code === this.restartKey) {
+        window.location.reload();   // simplest full reset
+        return;
+      }
+
       // Spells: 1 = turret, 2 = molotov (you can expand to 3, 4 later)
       switch (event.code) {
         case 'Digit1':
@@ -833,6 +855,9 @@ export class Game {
           break;
         case 'Digit4':
           // Placeholder for spell 4
+          break;
+        case 'KeyC': // toggle camera follow mode
+          this.ui.cameraToggleBtn.click();
           break;
       }
     });
@@ -1275,9 +1300,56 @@ export class Game {
     this.animate();
   }
 
+  onPlayerDeath() {
+    if (this.isGameOver) return;      // already handled
+ 
+    this.isGameOver = true;
+    
+    /* Freeze all enemies & animations -------------------------------- */
+    this.enemySpawner?.pause?.();     // only if you added a pause() method
+    this.turrets.forEach(t => t.active = false); 
+
+     /* spotlight over the body ------------------------------------- */
+    const spot = new THREE.SpotLight(0xffffff, 2, 60, Math.PI/7, .5, 1);
+    spot.position.set(
+      this.player.mesh.position.x,
+      40,
+      this.player.mesh.position.z
+    );
+    spot.target = this.player.mesh;
+    this.scene.add(spot, spot.target);
+
+    /* Immediately dim everything else — two tricks combined:
+    lower global lights, translucent overlay */
+    if (this.ambientLight)     this.ambientLight.intensity   = 0.05;
+    if (this.directionalLight) this.directionalLight.intensity = 0.05;
+    this.ui.dimStage();        // quick CSS overlay (doesn’t mute the spot)
+
+
+    /* after two seconds start fading to black --------------------- */
+    setTimeout(() => {
+      this.ui.fadeToBlack(()=>{
+        /* 3️⃣ show GAME OVER panel ------------------------------------ */
+        const wave  = this.enemySpawner?.currentWave ?? 0;
+        const ms    = performance.now() - this.sessionStart;
+        const m = Math.floor(ms/60000), s = Math.floor((ms%60000)/1000);
+        const timeStr = `${m}:${s.toString().padStart(2,'0')}`;
+        this.ui.showGameOver(wave, timeStr);
+      });
+
+    }, 2000);
+
+  }
+
   animate() {
     requestAnimationFrame(() => this.animate());
     const delta = this.clock.getDelta();
+
+    /* ─────────── GAME OVER?  ─────────── */
+    if (this.isGameOver) {
+      this.renderer.render(this.scene, this.camera); // still draw spotlight
+      return;                                        // skip all gameplay
+    }
 
     /* ─── wait until the player mesh has been loaded ─── */
     if (!this.player.mesh) {          // still null? → skip logic this frame
@@ -1314,7 +1386,7 @@ export class Game {
       
           // If the player is within the attack range and damage hasn't been applied for this cycle:
           if (distance < attackRange && !enemy.hasDamaged) {
-            this.player.takeDamage(1);
+            this.player.takeDamage(10);
             enemy.hasDamaged = true;
           }
         } else {
@@ -1504,27 +1576,6 @@ export class Game {
     if (this.input['KeyE']) {
       // Rotate camera to the right.
       this.cameraAngle += delta * rotationSpeed;
-    }
-    if (this.input['KeyC']) {
-      // 1. reset desired angle
-      this.cameraAngle = this.initialCameraAngle;
-    
-      // 2. kill any residual spring velocity
-      this.cameraVel.set(0, 0, 0);
-    
-      // 3. (optional but nice) snap to the new target immediately
-      const snapTarget = this.player.mesh.position.clone().add(
-        new THREE.Vector3(
-          this.cameraDistance * Math.cos(this.cameraAngle),
-          this.cameraHeight,
-          this.cameraDistance * Math.sin(this.cameraAngle)
-        )
-      );
-      this.camera.position.copy(snapTarget);
-      this.camera.lookAt(this.player.mesh.position);
-    
-      // 4. consume the keystroke so it runs only once
-      this.input['KeyC'] = false;
     }
     
     // Position the camera based on follow mode.

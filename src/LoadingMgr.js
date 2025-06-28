@@ -57,11 +57,9 @@ loadingMgr.onProgress = (_, loaded, total) => {
 
   if (pct < maxPct) return;
 
-  console.log('maxPct', maxPct, 'pct', pct);
   maxPct = pct;
   if (scrn) {
     scrn.setProgress(pct);
-    console.log('Loading progress:', pct, '%');
   } 
 }
 

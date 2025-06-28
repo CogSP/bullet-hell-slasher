@@ -65,7 +65,8 @@ export class EnemySpawner {
       }
     }
   }
-
+  
+  pause() { this.enabled = false; }   // called by Game.onPlayerDeath()
 
   // NOTE: 
   // Enemies should become stronger, faster and with more health at each wave

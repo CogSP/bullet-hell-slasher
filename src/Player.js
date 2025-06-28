@@ -9,6 +9,7 @@ export class Player {
     this.scene = scene;
     this.gameCamera = gameCamera; // Store the camera reference for particle effects.
     this.health = 100;
+    this.alive = true;
     this.speed = 10; // Movement speed.
     this.velocity = new THREE.Vector3(0, 0, 0);
     this.mesh = null; // Loaded model.
@@ -161,6 +162,7 @@ export class Player {
   }
 
   update(delta, input, cameraAngle, knifeAttackSpeedMultiplier) {
+    if (!this.alive) return;
     if (this.mixer) this.mixer.update(delta);
     if (!this.mesh) return;
   
@@ -241,7 +243,7 @@ export class Player {
   
     // Knife damage logic
     if (this.activeAction === this.actions.knife && !this.knifeDamageApplied) {
-      if (this.onKnifeHit) this.onKnifeHit(1);
+      if (this.onKnifeHit) this.onKnifeHit(80);
       this.knifeDamageApplied = true;
     }
   
@@ -306,6 +308,9 @@ export class Player {
   }
  
   takeDamage(amount, visualDelayMs = 700) {
+
+    if (!this.alive) return;
+    
     this.health -= amount;
 
     // schedule the flash/UI after the desired delay
@@ -316,9 +321,21 @@ export class Player {
     }
 
     if (this.health <= 0) {
-      console.log("Game Over!");
-      // game-over logic …
+      this.die();
     }
+  }
+
+  die() {
+
+    if (!this.alive) return; // already dead
+
+    this.alive = false;
+
+    /* optional: play a death animation or simply freeze */
+    if (this.actions.idle) this.fadeToAction('idle');
+
+    /* Tell the Game singleton */
+    this.game?.onPlayerDeath?.();
   }
 
   flashRed(duration = 0.25) {

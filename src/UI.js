@@ -85,38 +85,6 @@ export class UI {
     this.damageOverlay.style.pointerEvents = "none";
     document.body.appendChild(this.damageOverlay);
     
-
-    // // Create a container for the powerup bar.
-    // this.powerupBarContainer = document.createElement("div");
-    // this.powerupBarContainer.style.position = "absolute";
-    // this.powerupBarContainer.style.bottom = "60px";
-    // this.powerupBarContainer.style.left = "50%";
-    // this.powerupBarContainer.style.transform = "translateX(-50%)";
-    // this.powerupBarContainer.style.width = "300px";
-    // this.powerupBarContainer.style.height = "20px";
-    // this.powerupBarContainer.style.border = "2px solid white";
-    // this.powerupBarContainer.style.background = "rgba(0, 0, 0, 0.5)";
-    // this.powerupBarContainer.style.display = "none";
-    // document.body.appendChild(this.powerupBarContainer);
-
-    // // Create the actual powerup bar.
-    // this.powerupBar = document.createElement("div");
-    // this.powerupBar.style.height = "100%";
-    // this.powerupBar.style.width = "0%";
-    // this.powerupBar.style.background = "lime";
-    // this.powerupBarContainer.appendChild(this.powerupBar);
-
-    // // Create a label to show the powerup name.
-    // this.powerupLabel = document.createElement("div");
-    // this.powerupLabel.style.position = "absolute";
-    // this.powerupLabel.style.bottom = "85px";
-    // this.powerupLabel.style.left = "50%";
-    // this.powerupLabel.style.transform = "translateX(-50%)";
-    // this.powerupLabel.style.color = "white";
-    // this.powerupLabel.style.fontSize = "20px";
-    // this.powerupLabel.style.display = "none";
-    // document.body.appendChild(this.powerupLabel);
-
     if (!document.getElementById('centre-hud-style')) {
       const style = document.createElement('style');
       style.id = 'centre-hud-style';
@@ -220,12 +188,6 @@ export class UI {
       document.head.appendChild(style);
     }
 
-    
-    /* finally hide the old power-up widgets */
-    // this.powerupBarContainer.style.display = 'none';
-    // this.powerupLabel.style.display       = 'none';
-
-
     /* 0------------ Global CSS for the turret button (once per page) */
     if (!document.getElementById('turret-btn-style')) {
       const style = document.createElement('style');
@@ -243,6 +205,26 @@ export class UI {
       `;
       document.head.appendChild(style);
     }
+
+    if (!document.getElementById('cam-btn-style')) {
+      const style = document.createElement('style');
+      style.id = 'cam-btn-style';
+      style.textContent = `
+        .cam-btn{
+          width:40px;               /* square hit-target */
+          aspect-ratio:1;
+          cursor:pointer;
+          transition:filter .15s,transform .1s;
+          filter:drop-shadow(0 0 4px #0af);
+        }
+        .cam-btn:hover  { filter:drop-shadow(0 0 8px #4cf); }
+        .cam-btn:active { transform:scale(.93); }
+        /* when follow-mode is ON we’ll add the “active” class: */
+        .cam-btn.active{ filter:drop-shadow(0 0 8px #0f0); }
+      `;
+      document.head.appendChild(style);
+    }
+
 
     /* turret palette ---------------------------------------------------- */
     this.palette = document.createElement('div');
@@ -472,30 +454,23 @@ export class UI {
     this.hudRight.style.gap = "15px";
 
     const tip = document.createElement("span");
-    //tip.innerText = "💬 Press K to slash!";
 
-    this.cameraToggleButton = document.createElement("button");
-    this.cameraToggleButton.innerText = "Toggle Camera Follow";
-    this.cameraToggleButton.style.padding = "6px 12px";
-    this.cameraToggleButton.style.background = "#222";
-    this.cameraToggleButton.style.color = "white";
-    this.cameraToggleButton.style.border = "1px solid white";
-    this.cameraToggleButton.style.cursor = "pointer";
+    this.cameraToggleBtn = document.createElement("img");
+    this.cameraToggleBtn.src  = 'assets/ui/camera.svg';
+    this.cameraToggleBtn.alt  = 'Toggle Camera Follow';
+    this.cameraToggleBtn.className = 'cam-btn';
+    this.hudRight.appendChild(this.cameraToggleBtn);
 
-    // Append to right HUD
-    this.hudRight.appendChild(tip);
-    this.hudRight.appendChild(this.cameraToggleButton);
+    /* click → delegate to game + toggle visual state */
+    this.cameraToggleBtn.addEventListener('click', () => {
+      this.cameraToggleBtn.classList.toggle('active');      // visual feedback
+      this.onToggleCameraFollow?.();                        // call the hook
+    });
 
     // Append HUDs
     this.bottomHUD.appendChild(this.hudLeft);
     this.bottomHUD.appendChild(this.hudRight);
 
-    // Correct position for adding the event listener
-    this.cameraToggleButton.addEventListener("click", () => {
-      if (this.onToggleCameraFollow) {
-        this.onToggleCameraFollow();
-      }
-    });
 
     /* ───────── Floating bars above the player ───────── */
     this.playerBars = document.createElement('div');
@@ -523,7 +498,7 @@ export class UI {
     this.levelBadge.className = 'level-badge'
     this.playerBars.appendChild(this.levelBadge);
 
-    /* ➊ a column wrapper that will hold the two bars */
+    /* a column wrapper that will hold the two bars */
     this.barsColumn = document.createElement('div');
     this.barsColumn.style.cssText = `
         display:flex; flex-direction:column; gap:2px;
@@ -551,8 +526,51 @@ export class UI {
     this.barsColumn.appendChild(this.manaBack);
     this.playerBars.appendChild(this.barsColumn);
 
+
+    /* ╭─ full-screen fade & game-over panel ──────────────────────────────╮ */
+    this.fadeLayer = document.createElement('div');
+    this.fadeLayer.style.cssText = `
+      position:fixed; inset:0; background:#000; opacity:0;
+      transition:opacity 1.5s ease;  z-index:999; pointer-events:none;
+    `;
+    document.body.appendChild(this.fadeLayer);
+
+    /* translucent dimmer: just reuse the existing layer with lower opacity */
+    this.dimStage = ()=>{
+      this.fadeLayer.style.transition = 'opacity .6s ease';
+      this.fadeLayer.style.opacity = .45;      // ≈ 55 % darker
+    };
+
+    this.gameOverPanel = document.createElement('div');
+    this.gameOverPanel.style.cssText = `
+      position:fixed; inset:0; display:flex; flex-direction:column;
+      align-items:center; justify-content:center;
+      font:48px/1.2 'Impact',sans-serif; color:#fff;
+      text-align:center; opacity:0; transition:opacity .8s ease .2s;
+      z-index:1000; pointer-events:none;
+    `;
+    document.body.appendChild(this.gameOverPanel);
+
+    /* helpers ---------------------------------------------------------------- */
+    this.fadeToBlack = (cb)=>{
+      this.fadeLayer.style.opacity = 1;
+      this.fadeLayer.addEventListener('transitionend', cb, { once:true });
+    };
+
+    this.showGameOver = (wave,timeStr)=>{
+      this.gameOverPanel.innerHTML = `
+        <div style="font-size:72px;margin-bottom:.3em">💀 Game Over 💀</div>
+        <div style="font-size:32px">Wave ${wave}</div>
+        <div style="font-size:32px;margin-bottom:.6em">${timeStr}</div>
+        <div style="font-size:18px;opacity:.7">Press R to restart</div>`;
+      this.gameOverPanel.style.opacity = 1;
+    };
+
+
     this.updateLevelRing?.(1,0); // to make the HUD start at level 1 / 0%
   }
+
+  
 
   /**
    * @param {number} level         – 1,2,3…
