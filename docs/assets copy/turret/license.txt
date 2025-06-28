@@ -1,0 +1,8 @@
+Model Information:
+* title:	Railgun Turret
+* source:	https://sketchfab.com/3d-models/railgun-turret-d162c2b9803f4814bf5cb8aee3954b34
+* author:	plazma019 (https://sketchfab.com/plazma019)
+
+Model License:
+* license type:	SKETCHFAB Standard (https://sketchfab.com/licenses)
+* requirements:	Under basic restrictions, use worldwide, on all types of media, commercially or not, and in all types of derivative works

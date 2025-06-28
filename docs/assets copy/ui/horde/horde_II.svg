@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 48 48">
+  <!-- Black background -->
+  <rect width="48" height="48" fill="#000"></rect>
+  
+  <!-- White Roman numeral II, centered -->
+  <text x="50%" y="50%" text-anchor="middle" dominant-baseline="central" font-family="Georgia, serif" font-size="32" fill="#fff">
+    II
+  </text>
+</svg>

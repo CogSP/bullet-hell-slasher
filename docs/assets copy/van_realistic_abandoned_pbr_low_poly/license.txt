@@ -1,0 +1,11 @@
+Model Information:
+* title:	van realistic abandoned PBR low poly
+* source:	https://sketchfab.com/3d-models/van-realistic-abandoned-pbr-low-poly-e6d6f69a2bf748789f60066ffa9371a6
+* author:	mortalityrexotable (https://sketchfab.com/mortalityrexotable)
+
+Model License:
+* license type:	CC-BY-4.0 (http://creativecommons.org/licenses/by/4.0/)
+* requirements:	Author must be credited. Commercial use is allowed.
+
+If you use this 3D model in your project be sure to copy paste this credit wherever you share it:
+This work is based on "van realistic abandoned PBR low poly" (https://sketchfab.com/3d-models/van-realistic-abandoned-pbr-low-poly-e6d6f69a2bf748789f60066ffa9371a6) by mortalityrexotable (https://sketchfab.com/mortalityrexotable) licensed under CC-BY-4.0 (http://creativecommons.org/licenses/by/4.0/)

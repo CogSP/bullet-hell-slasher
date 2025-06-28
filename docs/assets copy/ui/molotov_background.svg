@@ -1,0 +1,23 @@
+<!--  assets/ui/molotov.svg  -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+
+  <!-- ─── solid black backdrop (drawn first) ─────────────────────────── -->
+  <rect width="64" height="64" fill="black"></rect>
+
+  <!-- ─── white molotov silhouette ───────────────────────────────────── -->
+  <!-- bottle body -->
+  <rect x="20" y="24" width="24" height="28" rx="4" fill="white"></rect>
+
+  <!-- neck -->
+  <rect x="28" y="18" width="8" height="8" rx="1.5" fill="white"></rect>
+
+  <!-- rag (simple stylised flame / cloth) -->
+  <path fill="white" d="
+      M32 8
+      l  6 10
+      q -3 3  0 6
+      l -6  4
+      l -6 -4
+      q  3 -3  0 -6
+      Z"></path>
+</svg>
