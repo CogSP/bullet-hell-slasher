@@ -39,55 +39,51 @@ export class Game {
       this.start();
     });
 
-    // TODO: I AM GONNA REMOVE THE POWERUP AND TRANSFORM THEM IN SOMETHING ELSE
-
     // Array to hold active bullets.
     this.bullets = [];
-
-    // After initializing existing variables like this.bullets
-    this.killTimestamps = [];             // Existing kill tracking for first powerup.
-    this.attackVelocityBuffActive = false; // First powerup flag.
-    this.attackVelocityBuffDuration = 15;  // First powerup duration (seconds).
-    this.attackVelocityBuffTimer = 0;      // First powerup timer.
+    this.killTimestamps = []; // May not be anymore, since I removed the kill-streak powerups
+ 
+    this.attackVelocityBuffActive = false; // powerup flag.
+    this.attackVelocityBuffDuration = 15;  // powerup duration (seconds).
+    this.attackVelocityBuffTimer = 0;      // powerup timer.
     this.attackVelocityBuffMultiplier = 2; // Buff multiplier for knife speed.
-
-    // New variables for the second powerup:
-    this.autoBulletKillCount = 0;          // Count of additional kills while first powerup is active.
-    this.autoBulletPowerupActive = false;  // Second powerup flag.
-    this.autoBulletPowerupDuration = 10;    // Duration for second powerup (seconds).
-    this.autoBulletPowerupTimer = 0;       // Timer for the second powerup.
-    this.autoBulletCooldown = 1;           // Interval between auto-shoot bursts (seconds).
-    this.autoBulletCooldownTimer = 0;      // Timer for auto-shoot bursts.
-
-    // Third powerup: Further increase knife animation speed.
     this.knifeSpeedPowerupActive = false;
     this.knifeSpeedPowerupDuration = 10;  // Duration in seconds (adjust as needed)
     this.knifeSpeedPowerupTimer = 0;
     this.knifeSpeedPowerupMultiplier = 2;  // Further multiplier for knife speed (e.g., from 2x to 6x total)
-    this.knifeSpeedPowerupKillCount = 0; // Count of additional kills while auto bullet powerup is active.
 
-    // Fourth powerup: Mega Auto Bullet Powerup.
-    this.megaAutoBulletPowerupActive = false;
-    this.megaAutoBulletPowerupDuration = 5;    // Duration in seconds (adjust as needed)
-    this.megaAutoBulletPowerupTimer = 0;
-    this.megaAutoBulletPowerupKillCount = 0;   // Count additional kills while auto bullet powerup is active.
+    /* ------------- Potion ---------------- */
+    this.potionTokens          = 3;   // start with a few
+    this.potionBuffDuration    = 8;  // seconds
+    this.potionBuffActive      = false;
+    this.potionBuffTimer       = 0;
 
-    // Fifth powerup: Ultra Auto Bullet Powerup.
-    this.ultraAutoBulletPowerupActive = false;
-    this.ultraAutoBulletPowerupDuration = 5;    // Duration in seconds (adjust as needed)
-    this.ultraAutoBulletPowerupTimer = 0;
-    this.ultraAutoBulletPowerupKillCount = 0;   // Count additional kills while the mega powerup is active.
-
-    // Sixth Powerup: BULLET HELL
-    this.bulletHellActive = false;
-    this.bulletHellDuration = 4;    // Duration of BULLET HELL in seconds.
-    this.bulletHellTimer = 0;       // Timer for bullet hell.
-    this.bulletHellKillCount = 0;   // Tracks extra kills while ultra powerup is active.
-
-    
     this.initGameState();
     this.registerEventListeners();
   }
+
+  /* Rough footprint the turret occupies on the ground  ─────────────── */
+  static TURRET_RADIUS = 1.6;   // metres (≈ the green cylinder you use)
+
+  /** returns true if the spot is free of static props *and* other turrets */
+  isTurretPlacementValid(pos){
+    /* 1. build a flat bounding-box around the proposed centre */
+    const r = Game.TURRET_RADIUS;
+    const bb = new THREE.Box3(
+        new THREE.Vector3(pos.x - r, -1, pos.z - r),
+        new THREE.Vector3(pos.x + r,  3, pos.z + r)   // a few metres tall
+    );
+
+    /* 2. collide with static scenery */
+    if (this.staticColliders.some(box => box.intersectsBox(bb))) return false;
+
+    /* 3. collide with already placed turrets */
+    for (const t of this.turrets){
+      if (t.object.position.distanceToSquared(pos) < (r*2)**2) return false;
+    }
+    return true;
+  }
+
 
   initScene() {
     // Create the scene and set a background color.
@@ -715,12 +711,18 @@ export class Game {
     };
     
     // Create the UI
+    this.turretTokens = 1900;          // how many the player can still place
+    this.molotovTokens = 1000;        // give player a few to start
+
     this.ui = new UI();
     this.ui.updateTurretCount(this.turretTokens);   // initial 0
     this.ui.updateMolotovCount(this.molotovTokens); // initial 3
     this.ui.camera = this.camera;
     
     this.ui.setAvatar('assets/ui/avatar.png');
+
+    this.ui.onDrinkPotion = () => this.tryDrinkPotion();
+
     
     // Create the Minimap
     this.minimap = new Minimap(1000 /* ground size */, 160 /* px */);
@@ -729,8 +731,6 @@ export class Game {
     // Create whatever
     this.pickups = [];
     this.turrets = [];
-    this.turretTokens = 1900;          // how many the player can still place
-    this.molotovTokens = 1000;        // give player a few to start
     this.molotovs      = [];       // active instances
     this.draggingMolotov = null;   // {img, ghost}
 
@@ -851,10 +851,9 @@ export class Game {
           this.simulatePointerMoveAtMouse();
           break;
         case 'Digit3':
-          // Placeholder for spell 3
+          this.tryDrinkPotion();
           break;
         case 'Digit4':
-          // Placeholder for spell 4
           break;
         case 'KeyC': // toggle camera follow mode
           this.ui.cameraToggleBtn.click();
@@ -958,17 +957,25 @@ export class Game {
           Math.round(hit.z / grid) * grid
         );
         this.draggingTurret.ghost.position.copy(hit);
+      
+        // validate and recolor
+        const ok = this.isTurretPlacementValid(hit);
+        this.draggingTurret.ghost.traverse(o=>{
+          if (o.isMesh && o.material){
+            o.material.color.set( ok ? 0x00ff00 : 0xff3333 );
+          }
+        });
+
       }
     });
 
     window.addEventListener('pointerup', e => {
       if (!this.draggingTurret) return;
 
-      /* if the ghost is sitting on the ground, place a real turret there */
-      const pos = this.draggingTurret.ghost.position;
-      // if (!isNaN(pos.x) && this.turretTokens > 0) {   // have a valid hit *and* a token
+      const pos = this.draggingTurret.ghost.position.clone();
+      const ok  = !isNaN(pos.x) && this.isTurretPlacementValid(pos);
       const turretCost = 50;
-      if (!isNaN(pos.x) && this.player.spendMana(turretCost)) {
+      if (ok && this.player.spendMana(turretCost)) {
         const turret = new Turret(
           pos.clone(),
           this.scene,
@@ -978,6 +985,8 @@ export class Game {
         this.turrets.push(turret);
 
         this.addTurretToken(-1);              // spend one token & refresh badge
+      } else if (!ok) {
+        this.ui.showFloatingMessage("❌ Can't place turret here!", pos);
       }
 
       /* clean up */
@@ -1118,6 +1127,13 @@ export class Game {
     this.ui.showFloatingMessage(`🔥 +${count} Molotov`, pos);
   }
 
+  addPotionToken(count = 1, worldPos = null){
+    this.potionTokens += count;
+    this.ui.updatePotionCount(this.potionTokens);
+    const pos = worldPos ?? this.player.mesh.position.clone();
+    this.ui.showFloatingMessage(`🧪 +${count} Potion`, pos);
+  }
+
   registerEnemyKill(enemy) {
     const now = this.clock.elapsedTime;
     // Record the kill time.
@@ -1140,41 +1156,41 @@ export class Game {
       }
     }
 
-    // When auto bullet powerup is active, track kills for the third powerup.
-    if (this.autoBulletPowerupActive && !this.knifeSpeedPowerupActive) {
-      this.knifeSpeedPowerupKillCount++;
-      if (this.knifeSpeedPowerupKillCount >= 5) {  // Trigger third powerup after 5 extra kills.
-        this.activateKnifeSpeedPowerupThree();
-        this.knifeSpeedPowerupKillCount = 0;
-      }
-    }
+    // // When auto bullet powerup is active, track kills for the third powerup.
+    // if (this.autoBulletPowerupActive && !this.knifeSpeedPowerupActive) {
+    //   this.knifeSpeedPowerupKillCount++;
+    //   if (this.knifeSpeedPowerupKillCount >= 5) {  // Trigger third powerup after 5 extra kills.
+    //     this.activateKnifeSpeedPowerupThree();
+    //     this.knifeSpeedPowerupKillCount = 0;
+    //   }
+    // }
 
-    // When auto bullet powerup is active, track kills for the mega auto bullet powerup.
-    if (this.autoBulletPowerupActive && !this.megaAutoBulletPowerupActive) {
-      this.megaAutoBulletPowerupKillCount++;
-      if (this.megaAutoBulletPowerupKillCount >= 15) {  // Trigger mega powerup after 15 extra kills.
-        this.activateMegaAutoBulletPowerup();
-        this.megaAutoBulletPowerupKillCount = 0;
-      }
-    }
+    // // When auto bullet powerup is active, track kills for the mega auto bullet powerup.
+    // if (this.autoBulletPowerupActive && !this.megaAutoBulletPowerupActive) {
+    //   this.megaAutoBulletPowerupKillCount++;
+    //   if (this.megaAutoBulletPowerupKillCount >= 15) {  // Trigger mega powerup after 15 extra kills.
+    //     this.activateMegaAutoBulletPowerup();
+    //     this.megaAutoBulletPowerupKillCount = 0;
+    //   }
+    // }
   
-    // When the mega powerup is active, track kills for the ultra auto bullet powerup.
-    if (this.megaAutoBulletPowerupActive && !this.ultraAutoBulletPowerupActive) {
-      this.ultraAutoBulletPowerupKillCount++;
-      if (this.ultraAutoBulletPowerupKillCount >= 10) {  // Trigger ultra powerup after 10 extra kills.
-        this.activateUltraAutoBulletPowerup();
-        this.ultraAutoBulletPowerupKillCount = 0;
-      }
-    }
+    // // When the mega powerup is active, track kills for the ultra auto bullet powerup.
+    // if (this.megaAutoBulletPowerupActive && !this.ultraAutoBulletPowerupActive) {
+    //   this.ultraAutoBulletPowerupKillCount++;
+    //   if (this.ultraAutoBulletPowerupKillCount >= 10) {  // Trigger ultra powerup after 10 extra kills.
+    //     this.activateUltraAutoBulletPowerup();
+    //     this.ultraAutoBulletPowerupKillCount = 0;
+    //   }
+    // }
   
-    // When the ultra powerup is active, count extra kills for BULLET HELL.
-    if (this.ultraAutoBulletPowerupActive && !this.bulletHellActive) {
-      this.bulletHellKillCount++;
-      if (this.bulletHellKillCount >= 10) {  // Trigger BULLET HELL after 10 extra kills.
-        this.activateBulletHell();
-        this.bulletHellKillCount = 0;
-      }
-    }
+    // // When the ultra powerup is active, count extra kills for BULLET HELL.
+    // if (this.ultraAutoBulletPowerupActive && !this.bulletHellActive) {
+    //   this.bulletHellKillCount++;
+    //   if (this.bulletHellKillCount >= 10) {  // Trigger BULLET HELL after 10 extra kills.
+    //     this.activateBulletHell();
+    //     this.bulletHellKillCount = 0;
+    //   }
+    // }
 
 
     const dropChance = 0.2; // 20% chance to drop a heart
@@ -1216,27 +1232,6 @@ export class Game {
     );
   }
 
-  activateUltraAutoBulletPowerup() {
-    this.ultraAutoBulletPowerupActive = true;
-    this.ultraAutoBulletPowerupTimer = this.ultraAutoBulletPowerupDuration;
-    this.ui.showFloatingMessage("⚡ Ultra Auto Bullet Powerup Activated!", this.player.mesh.position.clone());
-  }  
-
-  activateMegaAutoBulletPowerup() {
-    this.megaAutoBulletPowerupActive = true;
-    this.megaAutoBulletPowerupTimer = this.megaAutoBulletPowerupDuration;
-    // Display a message on the screen.
-    this.ui.showFloatingMessage("⚡ Mega Auto Bullet Powerup Activated!", this.player.mesh.position.clone());
-  }
-  
-  activateAutoBulletPowerup() {
-    this.autoBulletPowerupActive = true;
-    this.autoBulletPowerupTimer = this.autoBulletPowerupDuration;
-    // Display a message on screen.
-    this.ui.showFloatingMessage("⚡ Auto Bullet Powerup Activated!", this.player.mesh.position.clone());
-    // Reset the auto bullet cooldown so that the burst fires immediately.
-    this.autoBulletCooldownTimer = 0;
-  }
 
   activateKnifeSpeedPowerupThree() {
     this.knifeSpeedPowerupActive = true;
@@ -1300,6 +1295,37 @@ export class Game {
     this.animate();
   }
 
+  tryDrinkPotion() {
+    const potionCost = 70;               // ← pick any value you like
+
+    // 1) have at least one flask and the buff not already running
+    if (this.potionTokens <= 0 || this.potionBuffActive) return;
+
+    // 2) spend mana – abort if the player can’t afford it
+    if (!this.player.spendMana(potionCost)) {
+      this.ui.showFloatingMessage(
+        "Not enough mana!",
+        this.player.mesh.position.clone()
+      );
+      return;
+    }
+    /* consume the flask */
+    this.potionTokens--;
+    this.ui.updatePotionCount(this.potionTokens);
+
+    /* activate the two knife buffs only */
+    this.attackVelocityBuffActive = true;
+    this.attackVelocityBuffTimer  = this.potionBuffDuration;
+
+    this.knifeSpeedPowerupActive  = true;
+    this.knifeSpeedPowerupTimer   = this.potionBuffDuration;
+
+    this.potionBuffActive   = true;
+    this.potionBuffTimer    = this.potionBuffDuration;
+
+    this.ui.showFloatingMessage("🧪 Potion consumed!", this.player.mesh.position.clone());
+  }
+
   onPlayerDeath() {
     if (this.isGameOver) return;      // already handled
  
@@ -1359,10 +1385,16 @@ export class Game {
     // Determine the base knife attack multiplier from the first powerup.
     const baseKnifeSpeedMultiplier = this.attackVelocityBuffActive ? this.attackVelocityBuffMultiplier : 1;
     // If the third powerup is active, further multiply it.
-    const finalKnifeAttackSpeedMultiplier = baseKnifeSpeedMultiplier * (this.knifeSpeedPowerupActive ? this.knifeSpeedPowerupMultiplier : 1);
-    
+    const finalKnifeAttackSpeedMultiplier = baseKnifeSpeedMultiplier *
+           (this.knifeSpeedPowerupActive ? this.knifeSpeedPowerupMultiplier : 1);
+   
+    // Movement boost while the potion buff is running
+    const moveSpeedMultiplier = this.potionBuffActive ? 1.5 : 1;
+
     // Pass the final multiplier to the player update.
-    this.player.update(delta, this.input, this.cameraAngle, finalKnifeAttackSpeedMultiplier);
+    this.player.update(delta, this.input, this.cameraAngle,
+                       finalKnifeAttackSpeedMultiplier,
+                       moveSpeedMultiplier);
     
     if (this.enemySpawner) {
       // Update the enemy spawner
@@ -1432,111 +1464,111 @@ export class Game {
       // }
     }
 
-    // --- Auto Bullet Powerup Logic ---
-    if (this.bulletHellActive) {
-      // Update the bullet hell timer.
-      this.bulletHellTimer -= delta;
+    // // --- Auto Bullet Powerup Logic ---
+    // if (this.bulletHellActive) {
+    //   // Update the bullet hell timer.
+    //   this.bulletHellTimer -= delta;
       
-      // Override parameters for BULLET HELL:
-      //const bulletHellBulletCount = 64;         // Drastically increased bullet count.
-      const bulletHellBulletCount = 256;
-      const bulletHellSpeedMultiplier = 10;        // Much faster bullets.
-      const bulletHellCooldown = 0.1;             // Very short cooldown between bursts.
+    //   // Override parameters for BULLET HELL:
+    //   //const bulletHellBulletCount = 64;         // Drastically increased bullet count.
+    //   const bulletHellBulletCount = 256;
+    //   const bulletHellSpeedMultiplier = 10;        // Much faster bullets.
+    //   const bulletHellCooldown = 0.1;             // Very short cooldown between bursts.
       
-      // Decrement the cooldown timer.
-      this.autoBulletCooldownTimer -= delta;
-      if (this.autoBulletCooldownTimer <= 0) {
-        for (let i = 0; i < bulletHellBulletCount; i++) {
-          const angle = i * (2 * Math.PI / bulletHellBulletCount);
-          const direction = new THREE.Vector3(Math.cos(angle), 0, Math.sin(angle));
-          const bullet = new Bullet(this.player.mesh.position.clone(), direction, this.scene);
-          // Inherit the player's velocity.
-          bullet.velocity.add(this.player.velocity);
-          // Multiply the bullet speed.
-          bullet.velocity.multiplyScalar(bulletHellSpeedMultiplier);
-          // Enhance bullet appearance and damage:
-          bullet.mesh.scale.set(2.5, 2.5, 2.5); // Bigger bullet.
-          bullet.damage = 5;                   // Higher damage.
-          this.bullets.push(bullet);
-          this.scene.add(bullet.mesh);
-        }
-        // Reset the cooldown timer for BULLET HELL bursts.
-        this.autoBulletCooldownTimer = bulletHellCooldown;
-      }
+    //   // Decrement the cooldown timer.
+    //   this.autoBulletCooldownTimer -= delta;
+    //   if (this.autoBulletCooldownTimer <= 0) {
+    //     for (let i = 0; i < bulletHellBulletCount; i++) {
+    //       const angle = i * (2 * Math.PI / bulletHellBulletCount);
+    //       const direction = new THREE.Vector3(Math.cos(angle), 0, Math.sin(angle));
+    //       const bullet = new Bullet(this.player.mesh.position.clone(), direction, this.scene);
+    //       // Inherit the player's velocity.
+    //       bullet.velocity.add(this.player.velocity);
+    //       // Multiply the bullet speed.
+    //       bullet.velocity.multiplyScalar(bulletHellSpeedMultiplier);
+    //       // Enhance bullet appearance and damage:
+    //       bullet.mesh.scale.set(2.5, 2.5, 2.5); // Bigger bullet.
+    //       bullet.damage = 5;                   // Higher damage.
+    //       this.bullets.push(bullet);
+    //       this.scene.add(bullet.mesh);
+    //     }
+    //     // Reset the cooldown timer for BULLET HELL bursts.
+    //     this.autoBulletCooldownTimer = bulletHellCooldown;
+    //   }
       
-      if (this.bulletHellTimer <= 0) {
-        this.bulletHellActive = false;
+    //   if (this.bulletHellTimer <= 0) {
+    //     this.bulletHellActive = false;
         
-      }
-    } else if (this.ultraAutoBulletPowerupActive) {
-      // --- Ultra Auto Bullet Powerup Logic (if not in bullet hell) ---
-      this.ultraAutoBulletPowerupTimer -= delta;
-      const ultraBulletCount = 32;
-      const ultraBulletSpeedMultiplier = 3;
-      const ultraBulletCooldown = 0.2;
+    //   }
+    // } else if (this.ultraAutoBulletPowerupActive) {
+    //   // --- Ultra Auto Bullet Powerup Logic (if not in bullet hell) ---
+    //   this.ultraAutoBulletPowerupTimer -= delta;
+    //   const ultraBulletCount = 32;
+    //   const ultraBulletSpeedMultiplier = 3;
+    //   const ultraBulletCooldown = 0.2;
       
-      this.autoBulletCooldownTimer -= delta;
-      if (this.autoBulletCooldownTimer <= 0) {
-        for (let i = 0; i < ultraBulletCount; i++) {
-          const angle = i * (2 * Math.PI / ultraBulletCount);
-          const direction = new THREE.Vector3(Math.cos(angle), 0, Math.sin(angle));
-          const bullet = new Bullet(this.player.mesh.position.clone(), direction, this.scene);
-          bullet.velocity.add(this.player.velocity);
-          bullet.velocity.multiplyScalar(ultraBulletSpeedMultiplier);
-          bullet.mesh.scale.set(2, 2, 2);
-          bullet.damage = 3;
-          this.bullets.push(bullet);
-          this.scene.add(bullet.mesh);
-        }
-        this.autoBulletCooldownTimer = ultraBulletCooldown;
-      }
-      if (this.ultraAutoBulletPowerupTimer <= 0) {
-        this.ultraAutoBulletPowerupActive = false;
+    //   this.autoBulletCooldownTimer -= delta;
+    //   if (this.autoBulletCooldownTimer <= 0) {
+    //     for (let i = 0; i < ultraBulletCount; i++) {
+    //       const angle = i * (2 * Math.PI / ultraBulletCount);
+    //       const direction = new THREE.Vector3(Math.cos(angle), 0, Math.sin(angle));
+    //       const bullet = new Bullet(this.player.mesh.position.clone(), direction, this.scene);
+    //       bullet.velocity.add(this.player.velocity);
+    //       bullet.velocity.multiplyScalar(ultraBulletSpeedMultiplier);
+    //       bullet.mesh.scale.set(2, 2, 2);
+    //       bullet.damage = 3;
+    //       this.bullets.push(bullet);
+    //       this.scene.add(bullet.mesh);
+    //     }
+    //     this.autoBulletCooldownTimer = ultraBulletCooldown;
+    //   }
+    //   if (this.ultraAutoBulletPowerupTimer <= 0) {
+    //     this.ultraAutoBulletPowerupActive = false;
         
-      }
-    } else if (this.megaAutoBulletPowerupActive) {
-      // --- Mega Auto Bullet Powerup Logic ---
-      this.megaAutoBulletPowerupTimer -= delta;
-      const megaBulletCount = 16;
-      const megaBulletSpeedMultiplier = 2;
-      const megaBulletCooldown = 0.3;
+    //   }
+    // } else if (this.megaAutoBulletPowerupActive) {
+    //   // --- Mega Auto Bullet Powerup Logic ---
+    //   this.megaAutoBulletPowerupTimer -= delta;
+    //   const megaBulletCount = 16;
+    //   const megaBulletSpeedMultiplier = 2;
+    //   const megaBulletCooldown = 0.3;
       
-      this.autoBulletCooldownTimer -= delta;
-      if (this.autoBulletCooldownTimer <= 0) {
-        for (let i = 0; i < megaBulletCount; i++) {
-          const angle = i * (2 * Math.PI / megaBulletCount);
-          const direction = new THREE.Vector3(Math.cos(angle), 0, Math.sin(angle));
-          const bullet = new Bullet(this.player.mesh.position.clone(), direction, this.scene);
-          bullet.velocity.add(this.player.velocity);
-          bullet.velocity.multiplyScalar(megaBulletSpeedMultiplier);
-          this.bullets.push(bullet);
-          this.scene.add(bullet.mesh);
-        }
-        this.autoBulletCooldownTimer = megaBulletCooldown;
-      }
-      if (this.megaAutoBulletPowerupTimer <= 0) {
-        this.megaAutoBulletPowerupActive = false;
-      }
-    } else if (this.autoBulletPowerupActive) {
-      // --- Normal Auto Bullet Powerup Logic ---
-      this.autoBulletPowerupTimer -= delta;
-      this.autoBulletCooldownTimer -= delta;
-      if (this.autoBulletCooldownTimer <= 0) {
-        const bulletCount = 8;
-        for (let i = 0; i < bulletCount; i++) {
-          const angle = i * (2 * Math.PI / bulletCount);
-          const direction = new THREE.Vector3(Math.cos(angle), 0, Math.sin(angle));
-          const bullet = new Bullet(this.player.mesh.position.clone(), direction, this.scene);
-          bullet.velocity.add(this.player.velocity);
-          this.bullets.push(bullet);
-          this.scene.add(bullet.mesh);
-        }
-        this.autoBulletCooldownTimer = this.autoBulletCooldown;
-      }
-      if (this.autoBulletPowerupTimer <= 0) {
-        this.autoBulletPowerupActive = false;
-      }
-    }
+    //   this.autoBulletCooldownTimer -= delta;
+    //   if (this.autoBulletCooldownTimer <= 0) {
+    //     for (let i = 0; i < megaBulletCount; i++) {
+    //       const angle = i * (2 * Math.PI / megaBulletCount);
+    //       const direction = new THREE.Vector3(Math.cos(angle), 0, Math.sin(angle));
+    //       const bullet = new Bullet(this.player.mesh.position.clone(), direction, this.scene);
+    //       bullet.velocity.add(this.player.velocity);
+    //       bullet.velocity.multiplyScalar(megaBulletSpeedMultiplier);
+    //       this.bullets.push(bullet);
+    //       this.scene.add(bullet.mesh);
+    //     }
+    //     this.autoBulletCooldownTimer = megaBulletCooldown;
+    //   }
+    //   if (this.megaAutoBulletPowerupTimer <= 0) {
+    //     this.megaAutoBulletPowerupActive = false;
+    //   }
+    // } else if (this.autoBulletPowerupActive) {
+    //   // --- Normal Auto Bullet Powerup Logic ---
+    //   this.autoBulletPowerupTimer -= delta;
+    //   this.autoBulletCooldownTimer -= delta;
+    //   if (this.autoBulletCooldownTimer <= 0) {
+    //     const bulletCount = 8;
+    //     for (let i = 0; i < bulletCount; i++) {
+    //       const angle = i * (2 * Math.PI / bulletCount);
+    //       const direction = new THREE.Vector3(Math.cos(angle), 0, Math.sin(angle));
+    //       const bullet = new Bullet(this.player.mesh.position.clone(), direction, this.scene);
+    //       bullet.velocity.add(this.player.velocity);
+    //       this.bullets.push(bullet);
+    //       this.scene.add(bullet.mesh);
+    //     }
+    //     this.autoBulletCooldownTimer = this.autoBulletCooldown;
+    //   }
+    //   if (this.autoBulletPowerupTimer <= 0) {
+    //     this.autoBulletPowerupActive = false;
+    //   }
+    // }
 
     // --- Update pickups (e.g. health hearts) ---
     for (let i = this.pickups.length - 1; i >= 0; i--) {
@@ -1559,6 +1591,15 @@ export class Game {
         // Optionally, reset kill timestamps and autoBulletKillCount.
         this.killTimestamps = [];
         this.autoBulletKillCount = 0;
+      }
+    }
+
+    if (this.potionBuffActive) {
+      this.potionBuffTimer -= delta;
+      if (this.potionBuffTimer <= 0){
+        this.potionBuffActive = false;
+        this.attackVelocityBuffActive = false;
+        this.knifeSpeedPowerupActive  = false;
       }
     }
 

@@ -161,7 +161,8 @@ export class Player {
     if (this.mana > this.maxMana) this.mana = this.maxMana;
   }
 
-  update(delta, input, cameraAngle, knifeAttackSpeedMultiplier) {
+  update(delta, input, cameraAngle, knifeSpeedMult = 1, moveSpeedMult = 1) {
+
     if (!this.alive) return;
     if (this.mixer) this.mixer.update(delta);
     if (!this.mesh) return;
@@ -169,7 +170,7 @@ export class Player {
     // Handle knife attack
     if (input['MouseLeft'] && this.actions.knife && !this.isAttacking) {
       this.fadeToAction('knife');
-      this.actions.knife.timeScale = knifeAttackSpeedMultiplier;
+      this.actions.knife.timeScale = knifeSpeedMult;
       this.isAttacking = true;
       input['MouseLeft'] = false;
       return;
@@ -190,7 +191,7 @@ export class Player {
     moveDir.addScaledVector(cameraRight, rightInput);
   
 
-    let currentSpeed = this.speed * 1.8; // Always run
+    let currentSpeed = this.speed * 1.8 * moveSpeedMult; // Always run
 
     if (moveDir.length() > 0) {
         moveDir.normalize();
@@ -248,7 +249,7 @@ export class Player {
     }
   
     // Buff glow
-    this.setBuffEffect(knifeAttackSpeedMultiplier > 1);
+    this.setBuffEffect(knifeSpeedMult > 1);
   
     if (this.auraEffect && this.auraEnabled) {
       this.auraEffect.update(delta);

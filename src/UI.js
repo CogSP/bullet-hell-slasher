@@ -21,6 +21,7 @@ export class UI {
         /* individual colour tints ---------------------------------- */
         .turret-btn  { --glow:#0f0; filter:drop-shadow(0 0 4px var(--glow)); }
         .molotov-btn { --glow:#f60; filter:drop-shadow(0 0 4px var(--glow)); }
+        .potion-btn { --glow:#FFD700; filter:drop-shadow(0 0 4px var(--glow)); }
       `;
       document.head.appendChild(style);
     }
@@ -338,8 +339,32 @@ export class UI {
     spellRow.appendChild(this.molotovBtn);
     addKeyBadge(this.molotovBtn, '2');
 
-    /* — 3-5. empty slots — */
-    for (let k = 3; k <= 5; k++) {
+    /* — 3. Potion — */
+    this.potionBtn         = document.createElement('img');
+    this.potionBtn.src     = 'assets/ui/potion.svg';   // drop any 48×48 icon
+    this.potionBtn.alt     = 'Drink Potion';
+    this.potionBtn.classList.add('ui-btn', 'potion-btn');            // grey tint by default
+    spellRow.appendChild(this.potionBtn);
+    addKeyBadge(this.potionBtn, '3');
+    
+    this.potionBadge = this.turretBadge.cloneNode();
+    this.potionBadge.innerText = '0';
+    this.potionBtn.style.position = 'relative';
+    this.potionBtn.appendChild(this.potionBadge);
+    
+    this.updatePotionCount = n => {
+      this.potionBadge.innerText = n;
+      this.potionBtn.style.opacity = n > 0 ? '1' : '0.35';
+    };
+    
+    this.potionBtn.addEventListener('pointerdown', () => {
+      if (parseInt(this.potionBadge.innerText) > 0)
+        this.onDrinkPotion?.();
+    });
+    
+
+    /* empty slots */
+    for (let k = 4; k <= 5; k++) {
       const placeholder = document.createElement('img');
       placeholder.src   = 'assets/ui/horde/empty.svg';   // a 48×48 grey frame
       placeholder.alt   = `Spell ${k}`;
