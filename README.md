@@ -164,10 +164,8 @@ this.velocity.multiplyScalar(Math.exp(-4 * dt)); // τ ≈ 0.25 s
 
 * Heuristic: octile distance
 
-  $$
-  h = ( \sqrt2-1 )\min(|dx|,|dz|) + \max(|dx|,|dz|)
-  $$
-
+  $$h = (\sqrt2-1)\min(|dx|,|dz|) + \max(|dx|,|dz|)$$
+  
 * Distance-based *adaptive repath timer*
 
   ```js
