@@ -30,12 +30,20 @@ export class Player {
     this.level       = 1;         // starts at Lv-1
     this.xp          = 0;         // current XP
     this.xpToNext    = 50;        // XP needed for Lv-up (first tier)
+    this._mod = { knifeSpeed: 1, moveSpeed: 1 };
 
     const loader = new GLTFLoader(loadingMgr);
     loader.load(
       'assets/player/low_poly_soldier/scene.gltf',
       (gltf) => {
-        this.mesh = gltf.scene;             
+        this.mesh = gltf.scene;
+        // this is needed to make the model cast shadows
+        this.mesh.traverse(o => {
+          if (o.isMesh) {
+            o.castShadow    = true;   // they can cast
+            o.receiveShadow = true;   // …and receive, if you want contact-darkening
+          }
+        });         
         this.mesh.position.set(0, 1.5, 0);
         this.mesh.scale.set(0.07, 0.07, 0.07);
         this.mesh.castShadow = true; // TODO: check why this is not working: it should allow player to receive shadows
@@ -120,6 +128,18 @@ export class Player {
   }
 
 
+  // public helpers for buffs & debuffs
+  addTempModifier(kind, mult = 1) {
+    if (this._mod[kind] === undefined) this._mod[kind] = 1;
+    this._mod[kind] *= mult;
+  }
+  removeTempModifier(kind, mult = 1) {
+    if (this._mod[kind] === undefined) return;
+    this._mod[kind] /= mult;
+  }
+  get knifeMult() { return this._mod.knifeSpeed ?? 1; }
+  get moveMult()  { return this._mod.moveSpeed  ?? 1; }
+
   /* how many % of the ring should be filled right now? */
   get xpPct() { return (this.xp / this.xpToNext) * 100; }
 
@@ -161,7 +181,7 @@ export class Player {
     if (this.mana > this.maxMana) this.mana = this.maxMana;
   }
 
-  update(delta, input, cameraAngle, knifeSpeedMult = 1, moveSpeedMult = 1) {
+  update(delta, input, cameraAngle) {
 
     if (!this.alive) return;
     if (this.mixer) this.mixer.update(delta);
@@ -170,7 +190,7 @@ export class Player {
     // Handle knife attack
     if (input['MouseLeft'] && this.actions.knife && !this.isAttacking) {
       this.fadeToAction('knife');
-      this.actions.knife.timeScale = knifeSpeedMult;
+      this.actions.knife.timeScale = this.knifeMult; // uses the getter
       this.isAttacking = true;
       input['MouseLeft'] = false;
       return;
@@ -191,7 +211,7 @@ export class Player {
     moveDir.addScaledVector(cameraRight, rightInput);
   
 
-    let currentSpeed = this.speed * 1.8 * moveSpeedMult; // Always run
+    let currentSpeed = this.speed * 1.8 * this.moveMult; // uses the getter
 
     if (moveDir.length() > 0) {
         moveDir.normalize();
@@ -249,7 +269,7 @@ export class Player {
     }
   
     // Buff glow
-    this.setBuffEffect(knifeSpeedMult > 1);
+    this.setBuffEffect(this.knifeMult > 1);
   
     if (this.auraEffect && this.auraEnabled) {
       this.auraEffect.update(delta);

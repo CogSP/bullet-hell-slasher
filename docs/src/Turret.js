@@ -6,7 +6,7 @@ import { loadingMgr } from './LoadingMgr.js';
 export class Turret {
   constructor(pos, scene, spawner, bulletArray) {
     this.fireRate   = 2;   // shots/sec
-    this.range      = 50000000;  // firing radius
+    this.range      = 5000;  // firing radius
     this.turnSpeed  = 2;   // radians/sec
     this.cooldown   = 0;
     this.bulletArray = bulletArray;
@@ -20,6 +20,14 @@ export class Turret {
     const loader = new GLTFLoader(loadingMgr);
     loader.load('assets/turret/scene.gltf', gltf => {
       const model = gltf.scene;
+
+      // this is needed to make the model cast shadows
+      model.traverse(o => {
+      if (o.isMesh) {
+        o.castShadow    = true;    // ← THIS makes the sun paint its silhouette
+        o.receiveShadow = true;    // nice contact darkening on itself (optional)
+      }
+      });
 
       // OPTIONAL: scale and rotate to fit your world
       model.scale.set(1, 1, 1);

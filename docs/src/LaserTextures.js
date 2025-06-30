@@ -1,3 +1,4 @@
+// LaserTextures.js  (place somewhere in /src/)
 import * as THREE from 'three';
 import { loadingMgr } from './LoadingMgr.js';
 

@@ -64,7 +64,6 @@ export class Molotov {
                     const dead = e.takeDamage(dmg);
                     if (dead && this.game) {
                     this.game.enemySpawner.removeEnemy(e);
-                    this.game.registerEnemyKill(e);
                     }
                 }
             }

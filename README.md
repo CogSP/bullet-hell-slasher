@@ -16,6 +16,7 @@ A top-down rogue-like built with **Three.js** from scratch. The game mixes arcad
    * [Physics-based knock-back](#knockback)
    * [A\* path-finding](#a-path-finding)
    * [Particle effects](#particle-effects)
+   * [Molotov damage fall‑off](#molotov-damage-fall-off)
    * [Loading screen & manager](#loadingscreen--loadingmgr)
    * [Minimap](#minimap)
 4. [Programming Model](#programming-model)
@@ -85,6 +86,8 @@ Keyboard shortcuts
 | Mouse wheel | Zoom (orthographic scale) |
 | RMB drag    | Pan in Fixed mode         |
 
+<video src="demos/camera_system/camera_system_1k.mp4" width="640" controls loop></video>
+
 ---
 
 ### Random Object Spawning
@@ -102,18 +105,34 @@ A similar approach is used for fences & trees – each tries up to *maxAttempts*
 
 ---
 
-### Bullets • Kinetic Energy
+### Bullets • Kinetic Energy & Ballistics
 
-Every projectile is a tiny cylinder + glow sprite:
+Each projectile is a 3‑part composite (tiny cylinder core + glow sprite + pooled trail) yet costs <1 ms per frame for hundreds of rounds.
 
 ```js
-const energy = 0.5 * m * |v|²;
-const damage = 0.02 * energy;   // proportional scaling
+const E = 0.5 * m * v.lengthSq(); // kinetic energy (no costly sqrt)
+const dmg = 0.02 * E;             // linear damage scale
 ```
 
-No square root is taken (`lengthSq`), keeping the inner loop cheap.
+#### Turret ballistics at a glance
 
-Trails are **sprite-pooled** (`TRAIL_POOL_SIZE = 64`) to avoid GC / WebGL buffer churn.
+|  Property         |  Value / behaviour                                                            |
+| ----------------- | ----------------------------------------------------------------------------- |
+| **Muzzle speed**  | `300 m s⁻¹`                                   |
+| **Mass**          | `0.05 kg`                                                                     |
+| **Gravity**       | Applied every frame → *true* parabolic drop (`g = 9.81 m s⁻²`).               |
+| **Drag**          | *None* (commented out) – horizontal speed stays constant.                     |
+| **Cull distance** | Deleted after travelling ≈ 200 m (squared radius = `40000`).                  |
+| **Collision**     | Sphere‑sphere (full 3‑D distance).                                            |
+| **Damage**        | Proportional to kinetic energy ⇒ *quadratic* boost if bullet speed is buffed. |
+| **Tracer**        | 64‑sprite additive pool, stamped every 0.015 s and faded out.                 |
+
+**Gameplay implications**
+
+* Rounds exhibit **visible bullet‑drop** over long distances.
+* **Air air implementation is commented** ⇒ range is essentially unlimited until the 200 m kill‑box reaps the entity, keeping GPU load bounded. To implement air drag, it would be a simple `this.velocity.multiplyScalar(1 - 0.01 * dt)`.
+* Cheap maths: two vector adds for motion, one dot‑product for energy – ideal for large waves.
+
 
 ---
 
@@ -156,6 +175,8 @@ this.velocity.multiplyScalar(Math.exp(-4 * dt)); // τ ≈ 0.25 s
 
   Enemies far away waste fewer cycles on path refreshes.
 
+<video src="demos/A_star/A_star_demo_1k.mp4" width="640" controls loop></video>
+
 ---
 
 ### Particle Effects
@@ -173,6 +194,39 @@ Used by:
 | Molotov flames   | `fire`  | 120 pps, additive blend       |
 | Potion buff aura | `aura`  | Cyan orbits around the player |
 | Molotov smoke    | `smoke` | Normal blend, depth-tested    |
+
+---
+
+
+### Molotov Damage Fall‑off
+
+Each bottle spawns a **burn pool** (radius = 30 m, lifetime = 8 s).
+Every frame we iterate over enemies inside the ring and apply a *quadratic* heat fall‑off:
+
+$$
+\bigl\langle \text{DPS}\_{\text{centre}}\bigr\rangle\;t^{2}\;\Delta t,
+\qquad t = 1 - \frac{d}{R},\;0\le d\le R
+$$
+
+```js
+const dist = enemy.pos.distanceTo(centre);
+const t    = 1 - dist / radius;      // 0 … 1
+const dmg  = damagePerSec * t * t * dt; // quadratic drop‑off
+```
+
+* **Centre** (t = 1) → full 150 DPS
+* **Edge**   (t ≈ 0) → zero damage – gives players a buffer to escape
+* Multiplied by `dt` → frame‑rate independent
+
+Tweakable knobs:
+
+| Parameter      | Purpose                                         |
+| -------------- | ----------------------------------------------- |
+| `radius`       | Footprint of the fire puddle                    |
+| `damagePerSec` | Peak DPS at the epicentre                       |
+| power in `t^n` | 1 = linear, 2 = quadratic (default), 3+ steeper |
+
+A scorch decal plus GPU‑particle fire & smoke presets sell the effect visually.
 
 ---
 
@@ -209,11 +263,6 @@ Flags live in `this.input` → tight `update()` loops have **zero DOM queries**.
 ### Asynchronous Loading – Code-Splitting
 
 * Heavy GLTFs are streamed with **per-folder `setPath()`** to cut URL spam.
-* Optional features (`Molotov` class) are lazy-imported:
-
-```js
-const { Molotov } = await import('./Molotov.js');
-```
 
 Browsers parallelise fetches – main thread never stalls.
 
@@ -222,16 +271,18 @@ Browsers parallelise fetches – main thread never stalls.
 
 ### Controls reference
 
-| Key / Mouse | Action                        |
-| ----------- | ----------------------------- |
-| **W A S D** | Move / run (always sprint)    |
-| **Mouse L** | Knife attack                  |
-| **1**       | Place Turret (drag & release) |
-| **2**       | Throw Molotov (drag)          |
-| **3**       | Drink Potion                  |
-| **Q / E**   | Rotate camera                 |
-| **C**       | Toggle follow / fixed camera  |
-| **R**       | Restart after death           |
+| Key / Mouse | Action                            |
+| ----------- | -----------------------------     |
+| **W A S D** | Move / run (always sprint)        |
+| **Mouse L** | Knife attack                      |
+| **Mouse R** | Drag to move camera in fixed mode |
+| **1**       | Place Turret (drag & release)     |
+| **2**       | Throw Molotov (drag)              |
+| **3**       | Drink Potion                      |
+| **Q / E**   | Rotate camera                     |
+| **C**       | Toggle follow / fixed camera      |
+| **R**       | Restart after death               |
+| **P**       | Pause                             |
 
 ---
 

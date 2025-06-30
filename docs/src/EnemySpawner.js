@@ -26,6 +26,9 @@ export class EnemySpawner {
   }
 
   update(delta) {
+
+    if (this.enabled === false) return;
+
     if (this.waveInProgress) {
       // Spawn logic during the wave
       this.spawnTimer += delta;
@@ -67,6 +70,7 @@ export class EnemySpawner {
   }
   
   pause() { this.enabled = false; }   // called by Game.onPlayerDeath()
+  resume() { this.enabled = true; }
 
   // NOTE: 
   // Enemies should become stronger, faster and with more health at each wave

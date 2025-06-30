@@ -3,11 +3,10 @@ import { Player } from './Player.js';
 import { EnemySpawner } from './EnemySpawner.js';
 import { UI } from './UI.js';
 import { Bullet } from './Bullet.js';
-import { HeartPickup } from './HeartPickup.js';
 import { Minimap } from './Minimap.js';
 import { Turret } from './Turret.js';
+import { Potion } from './Potion.js';
 import { GridPathFinder } from './GridPathFinder.js';
-import { RGBELoader } from 'https://cdn.jsdelivr.net/npm/three@0.150.1/examples/jsm/loaders/RGBELoader.js';
 import { GLTFLoader } from 'https://cdn.jsdelivr.net/npm/three@0.150.1/examples/jsm/loaders/GLTFLoader.js';
 import { loadingMgr } from './LoadingMgr.js';
 
@@ -18,7 +17,7 @@ export class Game {
     this.container = container;
     this._firstFrameDone = false;
     this.isGameOver = false;
-    this.restartKey = 'KeyR';
+    this.paused = false;
 
     this.initScene();
     this.initCamera();
@@ -29,8 +28,8 @@ export class Game {
     this.staticColliders = [];
 
     this.playerSpawnPos = new THREE.Vector3(0, 0, 0); // actually the player is at y = 1.5 but it's the same
-    this.reservedRadius   = 60;                          // metres of clearance
-    this.reservedRadiusSq = this.reservedRadius ** 2;   // save a sqrt later
+    this.reservedRadius   = 60;                       // metres of clearance
+    this.reservedRadiusSq = this.reservedRadius ** 2; 
 
     // Load all static models, then initialize pathfinding + spawner
     this.loadStaticModels().then(() => {
@@ -41,25 +40,25 @@ export class Game {
 
     // Array to hold active bullets.
     this.bullets = [];
-    this.killTimestamps = []; // May not be anymore, since I removed the kill-streak powerups
- 
-    this.attackVelocityBuffActive = false; // powerup flag.
-    this.attackVelocityBuffDuration = 15;  // powerup duration (seconds).
-    this.attackVelocityBuffTimer = 0;      // powerup timer.
-    this.attackVelocityBuffMultiplier = 2; // Buff multiplier for knife speed.
-    this.knifeSpeedPowerupActive = false;
-    this.knifeSpeedPowerupDuration = 10;  // Duration in seconds (adjust as needed)
-    this.knifeSpeedPowerupTimer = 0;
-    this.knifeSpeedPowerupMultiplier = 2;  // Further multiplier for knife speed (e.g., from 2x to 6x total)
-
-    /* ------------- Potion ---------------- */
-    this.potionTokens          = 3;   // start with a few
-    this.potionBuffDuration    = 8;  // seconds
-    this.potionBuffActive      = false;
-    this.potionBuffTimer       = 0;
 
     this.initGameState();
     this.registerEventListeners();
+  }
+
+  togglePause() {
+    this.paused = !this.paused;
+    if (this.paused) {
+      this.clock.stop();        // Three’s clock now returns 0 Δt
+      this.enemySpawner?.pause?.();
+      this.turrets.forEach(t => t.active = false);
+      this.ui?.dimStage();      // quick dark overlay you already have
+      this.ui?.showFloatingMessage("⏸ Paused", this.player.mesh.position.clone());
+    } else {
+      this.clock.start();       // resumes from where it left off
+      this.enemySpawner?.resume?.();   // add “resume” just like pause
+      this.turrets.forEach(t => t.active = true);
+      this.ui?.undimStage?.();  // remove the overlay if you expose this
+    }
   }
 
   /* Rough footprint the turret occupies on the ground  ─────────────── */
@@ -90,7 +89,7 @@ export class Game {
     this.scene = new THREE.Scene();
     this.scene.background = new THREE.Color(0x202020);
 
-    /* ---------- PBR cobblestone ground ---------- */
+    // Cobblestone ground
     const texLoader = new THREE.TextureLoader(loadingMgr);
 
     const gColor  = texLoader.load('assets/ground/pbr/ground_albedo.jpg');
@@ -101,7 +100,7 @@ export class Game {
     // colour textures must be flagged as sRGB so lighting looks right
     gColor.colorSpace = THREE.SRGBColorSpace;
 
-    // tile the texture across the plane (fewer, larger tiles than before)
+    // set texture wrapping and tiling
     const TILE_REPEAT = 40;
     [gColor, gNormal, gRough, gAO].forEach(t => {
       if (t) {
@@ -116,16 +115,13 @@ export class Game {
       normalMap:     gNormal,
       roughnessMap:  gRough,
       aoMap:         gAO ?? undefined,
-      roughness:     1                             // let the texture drive it
+      roughness:     1
     });
 
     // dial the bump strength up or down if needed
     groundMaterial.normalScale.set(0.9, 0.9);
-    /* ----------------------------------------------------- */
-
+    
     // Create a large plane geometry for the ground (e.g., 1000 x 1000 units)
-    //const groundGeometry = new THREE.PlaneGeometry(1000, 1000);
-    //const groundGeometry = new THREE.PlaneGeometry(500, 500);
     const groundGeometry = new THREE.PlaneGeometry(1000, 1000);
 
     const groundMesh = new THREE.Mesh(groundGeometry, groundMaterial);
@@ -143,8 +139,7 @@ export class Game {
     // Setup camera.
     const aspect = this.container.clientWidth / this.container.clientHeight;
 
-    const viewSize = 100; // Adjust this value to zoom in/out
-    
+    const viewSize = 100; 
     
     // Calculate orthographic parameters
     const left = -viewSize * aspect / 2;
@@ -160,7 +155,7 @@ export class Game {
     this.camera.position.set(40, 40, 40); 
     this.camera.lookAt(new THREE.Vector3(0, 0, 0));
     
-    // --- New: Store initial camera state ---
+    // Store initial camera state ---
     // Calculate the angle (in the XZ plane) from the camera's position.
     this.initialCameraAngle = Math.atan2(this.camera.position.z, this.camera.position.x); // ~45° in radians
     this.cameraAngle = this.initialCameraAngle;
@@ -180,12 +175,12 @@ export class Game {
     // Setup renderer.
     this.renderer = new THREE.WebGLRenderer({ antialias: true });
     this.renderer.setSize(this.container.clientWidth, this.container.clientHeight);
-    //this.renderer.setPixelRatio(window.devicePixelRatio); // Optional but recommended
     this.container.appendChild(this.renderer.domElement);
     this.renderer.shadowMap.enabled = true; // Enable shadows
-    // Clock for delta time.
+    // Clock for calculating delta time.
     this.clock = new THREE.Clock();
-    this.sessionStart = performance.now();
+    // this is used to measure game time, shown during game over
+    this.sessionStart = performance.now(); 
   }
 
   initLights() {
@@ -193,7 +188,16 @@ export class Game {
     this.ambientLight = new THREE.AmbientLight(0xffffff, 0.5);
     this.scene.add(this.ambientLight);
     this.directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
-    this.directionalLight.position.set(0, 50, 50);
+    //this.directionalLight.position.set(0, 50, 50);
+    this.directionalLight.position.set(200, 140, 200);
+    // make it a shadow-caster
+    this.directionalLight.castShadow = true;
+    this.directionalLight.shadow.mapSize.set(2048, 2048);   // nicer resolution
+    this.directionalLight.shadow.camera.left   = -200;       // tighten the
+    this.directionalLight.shadow.camera.right  =  200;       //   orthographic
+    this.directionalLight.shadow.camera.top    =  200;       //   shadow frustum
+    this.directionalLight.shadow.camera.bottom = -200;
+    this.directionalLight.shadow.bias = -0.0005;             // fight acne
     this.scene.add(this.directionalLight);
   }
 
@@ -296,9 +300,7 @@ export class Game {
           .setPath('assets/100_random_low-poly_trees/')
           .loadAsync('scene.gltf');
 
-    /* ------------------------------------------------------------------ */
-    /*  1. prepare the *template* just once                               */
-    /* ------------------------------------------------------------------ */
+    // prepare the template just once
     const template = gltf.scene;
     template.scale.setScalar(3);
     template.traverse(o=>{
@@ -308,33 +310,25 @@ export class Game {
       }
     });
 
-    /* 2. measure it */
+    // measure it
     template.updateWorldMatrix(true, true);
     const localBBox = new THREE.Box3().setFromObject(template);
     const size      = new THREE.Vector3().subVectors(localBBox.max, localBBox.min);
 
-    /* our play-field is –250 … +250 in both X and Z                      */
+    // the playfield is -250, 250
     const mapHalf = 250;
 
-    /* helper that clones, moves, *records a collider* and adds to scene  */
+    // helper that clones, moves, records a collider and adds to scene
     const addForestWall = (pos, rotY)=>{
         const clone = template.clone(true);
         clone.position.copy(pos);
         clone.rotation.y = rotY || 0;
         this.scene.add(clone);
 
-        /* collider ------------------------------------------------------ */
+        // collider
         const box = new THREE.Box3().setFromObject(clone).expandByScalar(0.5);
         this.staticColliders.push(box);
     };
-
-    //create an helper
-    // const axes = new THREE.AxesHelper(50);
-    // this.scene.add(axes);
-
-    /* ------------------------------------------------------------------ */
-    /* 3. four walls                                                      */
-    /* ------------------------------------------------------------------ */
 
     // south
     addForestWall(
@@ -414,7 +408,7 @@ export class Game {
     });
 
     this.scene.add(root);
-    // (optional) add a collider:
+    // add a collider:
     this.staticColliders.push(new THREE.Box3().setFromObject(root));
   }
 
@@ -467,16 +461,7 @@ export class Game {
       new THREE.Vector3(160, 0, -60),
     ];
 
-    // // add a simple XYZ axis gizmo in one corner
-    // const axes = new THREE.AxesHelper(50);
-    // this.scene.add(axes);
-
-    // // draw a 10×10 ground grid every 10 m
-    // const grid = new THREE.GridHelper(500, 50);
-    // this.scene.add(grid);
-
-
-    /* ---- actually place them ---------------------------------------- */
+    // actually place them 
     CAR_SPAWNS.forEach(p => placeAt(carTemplate, p, 4, -90));
     VAN_SPAWNS.forEach(p => placeAt(vanTemplate, p, 5, -90));
   }
@@ -526,9 +511,9 @@ export class Game {
         rock.rotation.y = Math.random() * Math.PI * 2;
 
         rock.position.set(
-          THREE.MathUtils.randFloatSpread(mapHalfSize * 2), // x: −250‥250
+          THREE.MathUtils.randFloatSpread(mapHalfSize * 2),
           0,
-          THREE.MathUtils.randFloatSpread(mapHalfSize * 2)  // z: −250‥250
+          THREE.MathUtils.randFloatSpread(mapHalfSize * 2)
         );
 
         // 2. compute its bounding box in world space
@@ -546,16 +531,8 @@ export class Game {
           placed = true;
         }
 
-        // if (!overlaps) {
-        //   // success!  finalise this rock
-        //   this.scene.add(rock);
-        //   // store a *copy* of the box so tmpBox can be reused next loop
-        //   this.staticColliders.push(tmpBox.clone());
-        //   placed = true;
-        // }
-        // else: discard and retry
       }
-      // (optional) you could log if a rock couldn’t be placed after many tries
+      // (optional) we could log if a rock couldn’t be placed after many tries
     }
   }
 
@@ -681,9 +658,6 @@ export class Game {
             if (enemyDead) {
               // Remove enemy from scene if health reaches 0
               this.enemySpawner.removeEnemy(enemy);
-
-              // Record the kill.
-              this.registerEnemyKill(enemy);
             }
             else {
               const knockback = damage * 0.5;   // impulse magnitude
@@ -720,9 +694,6 @@ export class Game {
     this.ui.camera = this.camera;
     
     this.ui.setAvatar('assets/ui/avatar.png');
-
-    this.ui.onDrinkPotion = () => this.tryDrinkPotion();
-
     
     // Create the Minimap
     this.minimap = new Minimap(1000 /* ground size */, 160 /* px */);
@@ -733,7 +704,7 @@ export class Game {
     this.turrets = [];
     this.molotovs      = [];       // active instances
     this.draggingMolotov = null;   // {img, ghost}
-
+    this._activePotion = null;
 
   }
 
@@ -833,7 +804,7 @@ export class Game {
       this.input[event.code] = true;
 
       /* Allow restart when the game is over */
-      if (this.isGameOver && event.code === this.restartKey) {
+      if (this.isGameOver && event.code === 'KeyR') {
         window.location.reload();   // simplest full reset
         return;
       }
@@ -851,12 +822,15 @@ export class Game {
           this.simulatePointerMoveAtMouse();
           break;
         case 'Digit3':
-          this.tryDrinkPotion();
+          Potion.tryConsume(this);
           break;
         case 'Digit4':
           break;
         case 'KeyC': // toggle camera follow mode
           this.ui.cameraToggleBtn.click();
+          break;
+        case 'KeyP':
+          this.togglePause();
           break;
       }
     });
@@ -925,6 +899,24 @@ export class Game {
           new THREE.MeshBasicMaterial({ color:0x00ff00, opacity:0.5, transparent:true })
         );
       }
+
+      /* ───── add a range circle under that ghost ───── */
+      const RANGE_SQ = 5000;                        // same value as turret.range
+      const radius   = Math.sqrt(RANGE_SQ);         // convert to metres
+          
+      // thin ring looks nicer than a filled disc
+      const ringGeo = new THREE.RingGeometry(radius * 0.93, radius, 64); // inner, outer
+      const ringMat = new THREE.MeshBasicMaterial({
+        color: 0x00ff00,
+        transparent: true,
+        opacity: 0.4,
+        depthWrite: false       // never cut into the ground
+      });
+      const rangeRing = new THREE.Mesh(ringGeo, ringMat);
+      rangeRing.rotation.x = -Math.PI / 2;          // lie flat
+      rangeRing.position.y = 0.03;                  // lift a hair → avoid z-fighting
+      ghost.add(rangeRing);
+      /* ───────────────────────────────────────────────────── */
       this.scene.add(ghost);
 
       this.draggingTurret = { img, ghost };
@@ -965,7 +957,11 @@ export class Game {
             o.material.color.set( ok ? 0x00ff00 : 0xff3333 );
           }
         });
-
+        // the ring uses its own material – tint it to match
+        if (this.draggingTurret.rangeRing) {
+          this.draggingTurret.rangeRing.material.color
+                .set(ok ? 0x00ff00 : 0xff3333);
+        }
       }
     });
 
@@ -1057,7 +1053,6 @@ export class Game {
       this.draggingMolotov = null;              // reset state
 
       // /* --- 2.  If we still have a token, spawn a Molotov ------------ */
-      // if (this.molotovTokens > 0 && !isNaN(dropPos.x)) {
       const molotovCost = 50;
       if (!isNaN(dropPos.x) && this.player.spendMana(molotovCost)) {
         const { Molotov } = await import('./Molotov.js');
@@ -1126,101 +1121,6 @@ export class Game {
     const pos = worldPos ?? this.player.mesh.position.clone();
     this.ui.showFloatingMessage(`🔥 +${count} Molotov`, pos);
   }
-
-  addPotionToken(count = 1, worldPos = null){
-    this.potionTokens += count;
-    this.ui.updatePotionCount(this.potionTokens);
-    const pos = worldPos ?? this.player.mesh.position.clone();
-    this.ui.showFloatingMessage(`🧪 +${count} Potion`, pos);
-  }
-
-  registerEnemyKill(enemy) {
-    const now = this.clock.elapsedTime;
-    // Record the kill time.
-    this.killTimestamps.push(now);
-    // Remove kills older than 30 seconds.
-    this.killTimestamps = this.killTimestamps.filter(ts => now - ts <= 30);
-    
-    // Check for the first powerup condition.
-    if (!this.attackVelocityBuffActive && this.killTimestamps.length >= 5) {
-      this.activateAttackVelocityBuff();
-    }
-    
-    // When the first buff is active, track additional kills for the second powerup.
-    if (this.attackVelocityBuffActive && !this.autoBulletPowerupActive) {
-      this.autoBulletKillCount++;
-      if (this.autoBulletKillCount >= 10) {
-        this.activateAutoBulletPowerup();
-        // Optionally, reset the counter.
-        this.autoBulletKillCount = 0;
-      }
-    }
-
-    // // When auto bullet powerup is active, track kills for the third powerup.
-    // if (this.autoBulletPowerupActive && !this.knifeSpeedPowerupActive) {
-    //   this.knifeSpeedPowerupKillCount++;
-    //   if (this.knifeSpeedPowerupKillCount >= 5) {  // Trigger third powerup after 5 extra kills.
-    //     this.activateKnifeSpeedPowerupThree();
-    //     this.knifeSpeedPowerupKillCount = 0;
-    //   }
-    // }
-
-    // // When auto bullet powerup is active, track kills for the mega auto bullet powerup.
-    // if (this.autoBulletPowerupActive && !this.megaAutoBulletPowerupActive) {
-    //   this.megaAutoBulletPowerupKillCount++;
-    //   if (this.megaAutoBulletPowerupKillCount >= 15) {  // Trigger mega powerup after 15 extra kills.
-    //     this.activateMegaAutoBulletPowerup();
-    //     this.megaAutoBulletPowerupKillCount = 0;
-    //   }
-    // }
-  
-    // // When the mega powerup is active, track kills for the ultra auto bullet powerup.
-    // if (this.megaAutoBulletPowerupActive && !this.ultraAutoBulletPowerupActive) {
-    //   this.ultraAutoBulletPowerupKillCount++;
-    //   if (this.ultraAutoBulletPowerupKillCount >= 10) {  // Trigger ultra powerup after 10 extra kills.
-    //     this.activateUltraAutoBulletPowerup();
-    //     this.ultraAutoBulletPowerupKillCount = 0;
-    //   }
-    // }
-  
-    // // When the ultra powerup is active, count extra kills for BULLET HELL.
-    // if (this.ultraAutoBulletPowerupActive && !this.bulletHellActive) {
-    //   this.bulletHellKillCount++;
-    //   if (this.bulletHellKillCount >= 10) {  // Trigger BULLET HELL after 10 extra kills.
-    //     this.activateBulletHell();
-    //     this.bulletHellKillCount = 0;
-    //   }
-    // }
-
-
-    const dropChance = 0.2; // 20% chance to drop a heart
-    const turretChance = 0.05 // 5% chance to drop a turret token
-    if (Math.random() < dropChance) {
-      const heart = new HeartPickup(enemy.mesh.position.clone(), this.player);
-      this.pickups.push(heart);
-      this.scene.add(heart.mesh);
-
-      if (Math.random() < turretChance) {
-        this.addTurretToken(1, enemy.mesh.position);
-      }
-    }
-
-      /* give the player XP */
-    const xpGained      = enemy.xpValue ?? 1;           // or whatever you like
-    const didLevelUp    = this.player.addXP(xpGained);
-
-    /* push the info to the HUD every kill */
-    this.ui.updateLevelRing(
-        this.player.level,
-        this.player.xpPct
-    );
-
-    if (didLevelUp) {
-      this.ui.showFloatingMessage(`LEVEL ${this.player.level}! 🆙`,
-                                  this.player.mesh.position.clone());
-    }
-  }
-
 
   activateBulletHell() {
     this.bulletHellActive = true;
@@ -1295,36 +1195,6 @@ export class Game {
     this.animate();
   }
 
-  tryDrinkPotion() {
-    const potionCost = 70;               // ← pick any value you like
-
-    // 1) have at least one flask and the buff not already running
-    if (this.potionTokens <= 0 || this.potionBuffActive) return;
-
-    // 2) spend mana – abort if the player can’t afford it
-    if (!this.player.spendMana(potionCost)) {
-      this.ui.showFloatingMessage(
-        "Not enough mana!",
-        this.player.mesh.position.clone()
-      );
-      return;
-    }
-    /* consume the flask */
-    this.potionTokens--;
-    this.ui.updatePotionCount(this.potionTokens);
-
-    /* activate the two knife buffs only */
-    this.attackVelocityBuffActive = true;
-    this.attackVelocityBuffTimer  = this.potionBuffDuration;
-
-    this.knifeSpeedPowerupActive  = true;
-    this.knifeSpeedPowerupTimer   = this.potionBuffDuration;
-
-    this.potionBuffActive   = true;
-    this.potionBuffTimer    = this.potionBuffDuration;
-
-    this.ui.showFloatingMessage("🧪 Potion consumed!", this.player.mesh.position.clone());
-  }
 
   onPlayerDeath() {
     if (this.isGameOver) return;      // already handled
@@ -1355,7 +1225,7 @@ export class Game {
     /* after two seconds start fading to black --------------------- */
     setTimeout(() => {
       this.ui.fadeToBlack(()=>{
-        /* 3️⃣ show GAME OVER panel ------------------------------------ */
+        /* show GAME OVER panel ------------------------------------ */
         const wave  = this.enemySpawner?.currentWave ?? 0;
         const ms    = performance.now() - this.sessionStart;
         const m = Math.floor(ms/60000), s = Math.floor((ms%60000)/1000);
@@ -1368,34 +1238,44 @@ export class Game {
   }
 
   animate() {
+
     requestAnimationFrame(() => this.animate());
+    
     const delta = this.clock.getDelta();
 
-    /* ─────────── GAME OVER?  ─────────── */
+    // is the game paused? Don't update anything, just re-render the current frame.
+    if (this.paused) {
+      this.renderer.render(this.scene, this.camera);
+      return;
+    }
+
+    // GAME OVER? Don't update anything.
     if (this.isGameOver) {
       this.renderer.render(this.scene, this.camera); // still draw spotlight
       return;                                        // skip all gameplay
     }
 
-    /* ─── wait until the player mesh has been loaded ─── */
-    if (!this.player.mesh) {          // still null? → skip logic this frame
+    // wait until the player mesh has been loaded
+    if (!this.player.mesh) {          // still null? Skip logic this frame
       return;
     }
 
-    // Determine the base knife attack multiplier from the first powerup.
-    const baseKnifeSpeedMultiplier = this.attackVelocityBuffActive ? this.attackVelocityBuffMultiplier : 1;
-    // If the third powerup is active, further multiply it.
-    const finalKnifeAttackSpeedMultiplier = baseKnifeSpeedMultiplier *
-           (this.knifeSpeedPowerupActive ? this.knifeSpeedPowerupMultiplier : 1);
-   
-    // Movement boost while the potion buff is running
-    const moveSpeedMultiplier = this.potionBuffActive ? 1.5 : 1;
+    // -------------------------- UPDATE PLAYER --------------------------
+    this.player.update(delta, this.input, this.cameraAngle);
+    // ---------------------- END UPDATE PLAYER --------------------------
 
-    // Pass the final multiplier to the player update.
-    this.player.update(delta, this.input, this.cameraAngle,
-                       finalKnifeAttackSpeedMultiplier,
-                       moveSpeedMultiplier);
-    
+    // --------------------------- UPDATE LIGHTS --------------------------
+    // Make the sunlight follow the action so its 600 x 600 m box 
+    //is always centred on the player
+    const l = this.directionalLight;
+    const p = this.player.mesh.position;
+    const offset = new THREE.Vector3(200, 140, 200);   // same as in initLights
+    l.position.copy(p).add(offset);                    // move the light
+    l.target.position.copy(p);                         // look at player
+    l.target.updateMatrixWorld();
+    // ---------------------- END UPDATE LIGHTS --------------------------
+
+    // --------------------------- UPDATE ENEMIES --------------------------
     if (this.enemySpawner) {
       // Update the enemy spawner
       this.enemySpawner.update(delta);
@@ -1413,7 +1293,7 @@ export class Game {
           enemy.lastAttackCycleTime = enemy.attackAction.time;
       
           // Define the coverage area for the enemy's attack.
-          const attackRange = 5; // Adjust this value as needed.
+          const attackRange = 5;
           const distance = enemy.mesh.position.distanceTo(this.player.mesh.position);
       
           // If the player is within the attack range and damage hasn't been applied for this cycle:
@@ -1427,7 +1307,9 @@ export class Game {
         }
       }
     }
-
+    // ----------------------- END UPDATE ENEMIES --------------------------
+    
+    // --------------------------- UPDATE BULLETS --------------------------
     for (let i = this.bullets.length - 1; i >= 0; i--) {
       const bullet = this.bullets[i];
       bullet.update(delta);
@@ -1447,8 +1329,6 @@ export class Game {
           if (enemyDead) {
             // Remove enemy from scene if health reaches 0.
             this.enemySpawner.removeEnemy(enemy);
-            // Record the kill.
-            this.registerEnemyKill(enemy);
           }
           // Remove the bullet after it hits.
           this.scene.remove(bullet.mesh);
@@ -1456,121 +1336,10 @@ export class Game {
           break;
         }
       }
-
-      // // Remove bullets that travel too far.
-      // if (bullet.mesh.position.distanceTo(this.player.mesh.position) > 100) {
-      //   this.scene.remove(bullet.mesh);
-      //   this.bullets.splice(i, 1);
-      // }
     }
+    // ------------------------- END UPDATE BULLETS --------------------------
 
-    // // --- Auto Bullet Powerup Logic ---
-    // if (this.bulletHellActive) {
-    //   // Update the bullet hell timer.
-    //   this.bulletHellTimer -= delta;
-      
-    //   // Override parameters for BULLET HELL:
-    //   //const bulletHellBulletCount = 64;         // Drastically increased bullet count.
-    //   const bulletHellBulletCount = 256;
-    //   const bulletHellSpeedMultiplier = 10;        // Much faster bullets.
-    //   const bulletHellCooldown = 0.1;             // Very short cooldown between bursts.
-      
-    //   // Decrement the cooldown timer.
-    //   this.autoBulletCooldownTimer -= delta;
-    //   if (this.autoBulletCooldownTimer <= 0) {
-    //     for (let i = 0; i < bulletHellBulletCount; i++) {
-    //       const angle = i * (2 * Math.PI / bulletHellBulletCount);
-    //       const direction = new THREE.Vector3(Math.cos(angle), 0, Math.sin(angle));
-    //       const bullet = new Bullet(this.player.mesh.position.clone(), direction, this.scene);
-    //       // Inherit the player's velocity.
-    //       bullet.velocity.add(this.player.velocity);
-    //       // Multiply the bullet speed.
-    //       bullet.velocity.multiplyScalar(bulletHellSpeedMultiplier);
-    //       // Enhance bullet appearance and damage:
-    //       bullet.mesh.scale.set(2.5, 2.5, 2.5); // Bigger bullet.
-    //       bullet.damage = 5;                   // Higher damage.
-    //       this.bullets.push(bullet);
-    //       this.scene.add(bullet.mesh);
-    //     }
-    //     // Reset the cooldown timer for BULLET HELL bursts.
-    //     this.autoBulletCooldownTimer = bulletHellCooldown;
-    //   }
-      
-    //   if (this.bulletHellTimer <= 0) {
-    //     this.bulletHellActive = false;
-        
-    //   }
-    // } else if (this.ultraAutoBulletPowerupActive) {
-    //   // --- Ultra Auto Bullet Powerup Logic (if not in bullet hell) ---
-    //   this.ultraAutoBulletPowerupTimer -= delta;
-    //   const ultraBulletCount = 32;
-    //   const ultraBulletSpeedMultiplier = 3;
-    //   const ultraBulletCooldown = 0.2;
-      
-    //   this.autoBulletCooldownTimer -= delta;
-    //   if (this.autoBulletCooldownTimer <= 0) {
-    //     for (let i = 0; i < ultraBulletCount; i++) {
-    //       const angle = i * (2 * Math.PI / ultraBulletCount);
-    //       const direction = new THREE.Vector3(Math.cos(angle), 0, Math.sin(angle));
-    //       const bullet = new Bullet(this.player.mesh.position.clone(), direction, this.scene);
-    //       bullet.velocity.add(this.player.velocity);
-    //       bullet.velocity.multiplyScalar(ultraBulletSpeedMultiplier);
-    //       bullet.mesh.scale.set(2, 2, 2);
-    //       bullet.damage = 3;
-    //       this.bullets.push(bullet);
-    //       this.scene.add(bullet.mesh);
-    //     }
-    //     this.autoBulletCooldownTimer = ultraBulletCooldown;
-    //   }
-    //   if (this.ultraAutoBulletPowerupTimer <= 0) {
-    //     this.ultraAutoBulletPowerupActive = false;
-        
-    //   }
-    // } else if (this.megaAutoBulletPowerupActive) {
-    //   // --- Mega Auto Bullet Powerup Logic ---
-    //   this.megaAutoBulletPowerupTimer -= delta;
-    //   const megaBulletCount = 16;
-    //   const megaBulletSpeedMultiplier = 2;
-    //   const megaBulletCooldown = 0.3;
-      
-    //   this.autoBulletCooldownTimer -= delta;
-    //   if (this.autoBulletCooldownTimer <= 0) {
-    //     for (let i = 0; i < megaBulletCount; i++) {
-    //       const angle = i * (2 * Math.PI / megaBulletCount);
-    //       const direction = new THREE.Vector3(Math.cos(angle), 0, Math.sin(angle));
-    //       const bullet = new Bullet(this.player.mesh.position.clone(), direction, this.scene);
-    //       bullet.velocity.add(this.player.velocity);
-    //       bullet.velocity.multiplyScalar(megaBulletSpeedMultiplier);
-    //       this.bullets.push(bullet);
-    //       this.scene.add(bullet.mesh);
-    //     }
-    //     this.autoBulletCooldownTimer = megaBulletCooldown;
-    //   }
-    //   if (this.megaAutoBulletPowerupTimer <= 0) {
-    //     this.megaAutoBulletPowerupActive = false;
-    //   }
-    // } else if (this.autoBulletPowerupActive) {
-    //   // --- Normal Auto Bullet Powerup Logic ---
-    //   this.autoBulletPowerupTimer -= delta;
-    //   this.autoBulletCooldownTimer -= delta;
-    //   if (this.autoBulletCooldownTimer <= 0) {
-    //     const bulletCount = 8;
-    //     for (let i = 0; i < bulletCount; i++) {
-    //       const angle = i * (2 * Math.PI / bulletCount);
-    //       const direction = new THREE.Vector3(Math.cos(angle), 0, Math.sin(angle));
-    //       const bullet = new Bullet(this.player.mesh.position.clone(), direction, this.scene);
-    //       bullet.velocity.add(this.player.velocity);
-    //       this.bullets.push(bullet);
-    //       this.scene.add(bullet.mesh);
-    //     }
-    //     this.autoBulletCooldownTimer = this.autoBulletCooldown;
-    //   }
-    //   if (this.autoBulletPowerupTimer <= 0) {
-    //     this.autoBulletPowerupActive = false;
-    //   }
-    // }
-
-    // --- Update pickups (e.g. health hearts) ---
+    // --------------------------- UPDATE PICKUPS --------------------------
     for (let i = this.pickups.length - 1; i >= 0; i--) {
       const heart = this.pickups[i];
       const collected = heart.update(delta);
@@ -1581,33 +1350,14 @@ export class Game {
         this.ui.showFloatingMessage("+20 HP 💖", this.player.mesh.position.clone());
       }      
     }
+    // ------------------------- END UPDATE PICKUPS --------------------------
 
-
-    // --- First Powerup Timer Update ---
-    if (this.attackVelocityBuffActive) {
-      this.attackVelocityBuffTimer -= delta;
-      if (this.attackVelocityBuffTimer <= 0) {
-        this.attackVelocityBuffActive = false;
-        // Optionally, reset kill timestamps and autoBulletKillCount.
-        this.killTimestamps = [];
-        this.autoBulletKillCount = 0;
-      }
-    }
-
-    if (this.potionBuffActive) {
-      this.potionBuffTimer -= delta;
-      if (this.potionBuffTimer <= 0){
-        this.potionBuffActive = false;
-        this.attackVelocityBuffActive = false;
-        this.knifeSpeedPowerupActive  = false;
-      }
-    }
-
-   // Update the UI with health, score, wave *and* remaining turrets.
+    // --------------------------- UPDATE UI --------------------------
     this.ui.update(this.enemySpawner?.currentWave ?? 0);
-    // this.ui.updateStaminaBar((this.player.stamina / this.player.maxStamina) * 100);
+    // ------------------------- END UPDATE UI --------------------------
+    
 
-    // Update camera based on input 
+    // --------------------------- UPDATE CAMERA --------------------------
     const rotationSpeed = 1.0; // Radians per second
 
     if (this.input['KeyQ']) {
@@ -1621,14 +1371,6 @@ export class Game {
     
     // Position the camera based on follow mode.
     if (this.cameraFollow && this.player.mesh) {
-      // // Follow mode: camera's position is offset from the player's position.
-      // this.camera.position.set(
-      //   this.player.mesh.position.x + this.cameraDistance * Math.cos(this.cameraAngle),
-      //   this.player.mesh.position.y + this.cameraHeight,
-      //   this.player.mesh.position.z + this.cameraDistance * Math.sin(this.cameraAngle)
-      // );
-      // this.camera.lookAt(this.player.mesh.position);
-
       /*------------------------------------------------------------
         Spring-damper camera smoothing
         x  = camera.position          (current state)
@@ -1640,7 +1382,7 @@ export class Game {
         x += v Δt
       ------------------------------------------------------------*/
     
-      // 1) where should the camera eventually sit?
+      // where should the camera eventually sit?
       const target = this.player.mesh.position.clone().add(
         new THREE.Vector3(
           this.cameraDistance * Math.cos(this.cameraAngle),
@@ -1649,19 +1391,19 @@ export class Game {
         )
       );
     
-      // 2) spring parameters (tweak to taste)
+      // spring parameters 
       const k = 12;    // stiffness  (how aggressively it pulls)
       const c = 8;     // damping    (how much it resists oscillation)
     
-      // 3) acceleration = spring + damping
+      // acceleration = spring + damping
       const camAcc = target.clone().sub(this.camera.position).multiplyScalar(k)
                       .add(this.cameraVel.clone().multiplyScalar(-c));
     
-      // 4) semi-implicit Euler integrate
+      // semi-implicit Euler integrate
       this.cameraVel.addScaledVector(camAcc, delta);       // v ← v + aΔt
       this.camera.position.addScaledVector(this.cameraVel, delta); // x ← x + vΔt
     
-      // 5) always look at the player
+      // always look at the player
       this.camera.lookAt(this.player.mesh.position);
     } else {
         // Fixed mode: orbit around the saved centre
@@ -1672,73 +1414,37 @@ export class Game {
         );
      this.camera.lookAt(this.fixedCameraCenter);
     }
+    // ------------------------- END UPDATE CAMERA --------------------------
     
-    if (this.attackVelocityBuffActive) {
-      this.attackVelocityBuffTimer -= delta;
-      if (this.attackVelocityBuffTimer <= 0) {
-        this.attackVelocityBuffActive = false;
-        // Optionally clear kill timestamps or reset them.
-        this.killTimestamps = [];
-      }
-    }
-      
-    // Update the third powerup timer.
-    if (this.knifeSpeedPowerupActive) {
-      this.knifeSpeedPowerupTimer -= delta;
-      if (this.knifeSpeedPowerupTimer <= 0) {
-        this.knifeSpeedPowerupActive = false;
-      }
-    }
-
-    let powerupPercentage = 0;
-    let powerupLabel = "";
-
-    // Check for active powerups in order of priority.
-    if (this.bulletHellActive) {
-      powerupPercentage = (this.bulletHellTimer / this.bulletHellDuration) * 100;
-      powerupLabel = "BULLET HELL"
-    } else if (this.ultraAutoBulletPowerupActive) {
-      powerupPercentage = (this.ultraAutoBulletPowerupTimer / this.ultraAutoBulletPowerupDuration) * 100;
-      powerupLabel = "Ultra Auto Bullet";
-    } else if (this.megaAutoBulletPowerupActive) {
-      powerupPercentage = (this.megaAutoBulletPowerupTimer / this.megaAutoBulletPowerupDuration) * 100;
-      powerupLabel = "Mega Auto Bullet";
-    } else if (this.autoBulletPowerupActive) {
-      powerupPercentage = (this.autoBulletPowerupTimer / this.autoBulletPowerupDuration) * 100;
-      powerupLabel = "Auto Bullet";
-    } else if (this.knifeSpeedPowerupActive) {
-      powerupPercentage = (this.knifeSpeedPowerupTimer / this.knifeSpeedPowerupDuration) * 100;
-      powerupLabel = "Knife Speed";
-    } else if (this.attackVelocityBuffActive) {
-      powerupPercentage = (this.attackVelocityBuffTimer / this.attackVelocityBuffDuration) * 100;
-      powerupLabel = "Knife Buff";
-    } else {
-      powerupPercentage = 0;
-      powerupLabel = "";
-    }
-
-    // this.ui.updatePowerupBar(powerupPercentage, powerupLabel);
     
-
-    // update turrets
+    // --------------------------- UPDATE TURRETS --------------------------
     for (const t of this.turrets) t.update(delta);
+    // ------------------------- END UPDATE TURRETS --------------------------
 
-    /* update Molotovs */
-    for(let i=this.molotovs.length-1;i>=0;i--){
+    // --------------------------- UPDATE MOLOTOVS --------------------------
+    for(let i=this.molotovs.length-1;i>=0;i--) {
       const m=this.molotovs[i];
-      m.enemies = this.enemySpawner.enemies;   // give live list each frame
+      m.enemies = this.enemySpawner.enemies; // each frame, we give to each molotov a fresh list of the enemies
       const dead = m.update(delta);
       if(dead){
         this.molotovs.splice(i,1);
       }
     }
+    // ------------------------- END UPDATE MOLOTOVS --------------------------
 
+    // --------------------------- UPDATE POTION --------------------------
+    if (this._activePotion && this._activePotion.update(delta)) {
+      // if update() returned true the buff expired & cleaned itself
+      this._activePotion = null;
+    }
+    // ------------------------- END UPDATE POTION --------------------------
+
+    // --------------------------- UPDATE PLAYER BARS --------------------------
     this.player.regenMana(delta);
     this.ui.updateManaBar((this.player.mana / this.player.maxMana) * 100);
 
-    const headPos = this.player.mesh.position.clone().add(new THREE.Vector3(0, 15, 0));
     this.ui.updatePlayerBars(
-      headPos,
+      this.player.mesh.position.clone().add(new THREE.Vector3(0, 15, 0)), // this is the head position of the player
       this.player.health,
       (this.player.mana / this.player.maxMana) * 100
     );
@@ -1746,17 +1452,20 @@ export class Game {
     this.ui.updateCenterHUD(
         this.player.health,
         (this.player.mana / this.player.maxMana) * 100,
-        null                                               // ⇢ pass a URL if
-    );                                                     //    you switch spells
+        null
+    );    
+    this.ui.updateLevelRing(this.player.level, this.player.xpPct);
+    // ------------------------- END UPDATE PLAYER BARS --------------------------
 
+
+    // --------------------------------- UPDATE MINIMAP --------------------------
     this.minimap.update(
       this.player,
       this.enemySpawner?.enemies ?? [],
       this.pickups,
       this.cameraAngle
     );
-
-    this.ui.updateLevelRing(this.player.level, this.player.xpPct);
+    // --------------------------- END UPDATE MINIMAP --------------------------
 
     // Render the scene.
     this.renderer.render(this.scene, this.camera);

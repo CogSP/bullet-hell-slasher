@@ -31,6 +31,13 @@ export class Enemy {
     // https://www.fab.com/listings/733760dc-83ac-483e-a75b-223c8a36be97
     loader.load('assets/zombie_commoner/scene.gltf', (gltf) => {
       gltf.scene.scale.set(0.05, 0.05, 0.05);
+      // this is needed to make the model cast shadows
+      gltf.scene.traverse(o => {
+        if (o.isMesh) {
+          o.castShadow    = true;
+          o.receiveShadow = true;
+        }
+      });
       this.mesh.add(gltf.scene);
       
       if (gltf.animations && gltf.animations.length) {

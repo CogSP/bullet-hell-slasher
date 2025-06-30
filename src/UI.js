@@ -354,7 +354,7 @@ export class UI {
     
     this.updatePotionCount = n => {
       this.potionBadge.innerText = n;
-      this.potionBtn.style.opacity = n > 0 ? '1' : '0.35';
+      //this.potionBtn.style.opacity = n > 0 ? '1' : '0.35';
     };
     
     this.potionBtn.addEventListener('pointerdown', () => {
@@ -566,6 +566,13 @@ export class UI {
       this.fadeLayer.style.opacity = .45;      // ≈ 55 % darker
     };
 
+    /* reverse the effect */
+    this.undimStage = () => {
+      if (!this.fadeLayer) return;
+      this.fadeLayer.style.transition = 'opacity .4s ease';
+      this.fadeLayer.style.opacity    = 0;         // fade back to normal
+    };
+
     this.gameOverPanel = document.createElement('div');
     this.gameOverPanel.style.cssText = `
       position:fixed; inset:0; display:flex; flex-direction:column;
@@ -686,19 +693,6 @@ export class UI {
     setTimeout(() => {
       this.messageDiv.style.display = 'none';
     }, duration * 1000);
-  }
-
-  updatePowerupBar(percentage, label = "") {
-    this.powerupBar.style.width = percentage + "%";
-    this.powerupLabel.innerText = label;
-    if (percentage > 0) {
-      this.powerupBarContainer.style.display = "block";
-      this.powerupLabel.style.display = "block";
-    } else {
-      this.powerupBar.style.width = "100%";
-      this.powerupLabel.innerText = "No Powerups Active";
-      this.powerupLabel.style.display = "block";
-    }
   }
 
   updateManaBar(percentage) {

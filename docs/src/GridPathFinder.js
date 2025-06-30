@@ -19,6 +19,9 @@ export class GridPathFinder {
     this.grid  = new Uint8Array( sizeX * sizeZ ).fill(1); // true  = walkable, false = blocked
 
     this._debugLine = null; // track last path line drawn for debug so we can remove it later
+    // track the current start / goal meshes so we can delete them next time */
+    this._startMarker = null;
+    this._goalMarker  = null;
   }
 
 
@@ -66,6 +69,7 @@ export class GridPathFinder {
     m.rotation.x = -Math.PI/2;           // lie flat
     m.position.set(worldCenter.x, 0.02, worldCenter.z);
     scene.add(m);
+    return m;           // give the caller the mesh reference
 }
 
 
@@ -142,9 +146,21 @@ export class GridPathFinder {
     const start = this.worldToCell(startW);
     const goal  = this.worldToCell(goalW);
 
+    // DEBUG, comment when gaming
+    /* erase previous markers, then draw fresh ones */
     // if (scene) {
-    //   this.highlightCell(start, scene, 0x00ff00); // green = start
-    //   this.highlightCell(goal,  scene, 0xff0000); // red   = goal
+    //   const wipe = (mesh) => {
+    //     if (mesh) {
+    //       scene.remove(mesh);
+    //       mesh.geometry.dispose();
+    //       mesh.material.dispose();
+    //     }
+    //   };
+    //   wipe(this._startMarker);
+    //   wipe(this._goalMarker);
+
+    //   this._startMarker = this.highlightCell(start, scene, 0x00ff00); // green
+    //   this._goalMarker  = this.highlightCell(goal,  scene, 0xff0000); // red
     // }
 
     if (!this.get(goal.x, goal.y)) { // goal blocked
@@ -213,6 +229,7 @@ export class GridPathFinder {
           cur = came.get(cur);
         }
 
+        // // DEBUG, comment while gaming
         // // ─── remove previous debug line ─────────────────────────────────
         // if (this._debugLine && scene) {
         //   scene.remove(this._debugLine);
@@ -221,6 +238,7 @@ export class GridPathFinder {
         //   this._debugLine = null;
         // }
 
+        // // DEBUG, comment while gaming
         // // draw the path in the scene for debugging
         // if (scene && path.length) {
         //   // lift it slightly off the ground so you can see it

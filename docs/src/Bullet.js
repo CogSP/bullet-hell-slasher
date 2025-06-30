@@ -44,6 +44,8 @@ export class Bullet {
     this.radius   = 5.35;
     this.alive    = true;
 
+    // this.dragCoefficient = 0.8; // air drag coefficient
+
     /*―― core mesh (tiny cylinder) ――*/
     const coreLen = 1.6, coreRad = 0.08;
     const coreGeo = new THREE.CylinderGeometry(coreRad, coreRad, coreLen, 6, 1, true);
@@ -98,7 +100,13 @@ export class Bullet {
   update(dt) {
     if (!this.alive) return;
 
-    //this.velocity.addScaledVector(GRAVITY, dt);
+    // apply gravity
+    this.velocity.addScaledVector(GRAVITY, dt);
+    
+    // // Apply air drag
+    // this.velocity.multiplyScalar(Math.exp(-this.dragCoefficient * dt));
+
+    // integrate position
     this.mesh.position.addScaledVector(this.velocity, dt);
 
     if (this.mesh.position.lengthSq() > 40000) {
