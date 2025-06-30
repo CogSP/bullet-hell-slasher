@@ -12,11 +12,11 @@ A playground for experimenting and prototyping real-time 3D graphics in Three.js
 
    * [Camera spring-damper](#camera-system)
    * [Statistical spawning](#random-object-spawning)
-   * [Bullet ballistics & kinetic energy](#bullets--kinetic-energy)
+   * [Bullet ballistics & kinetic energy](#bullets-ballistics)
    * [Physics-based knock-back](#knockback)
    * [A\* path-finding](#a-path-finding)
    * [Particle effects](#particle-effects)
-   * [Molotov damage fall‑off](#molotov-damage-fall-off)
+   * [Molotov damage fall off](#molotov-damage-fall-off)
    * [Loading screen & manager](#loadingscreen--loadingmgr)
    * [Minimap](#minimap)
 4. [Programming Model](#programming-model)
@@ -107,7 +107,7 @@ A similar approach is used for fences & trees – each tries up to *maxAttempts*
 
 ---
 
-### Bullets • Kinetic Energy & Ballistics
+### Bullets Ballistics
 
 Each projectile is a 3‑part composite (tiny cylinder core + glow sprite + pooled trail) yet costs <1 ms per frame for hundreds of rounds.
 
@@ -200,7 +200,7 @@ Used by:
 ---
 
 
-### Molotov Damage Fall‑off
+### Molotov Damage Fall off
 
 Each bottle spawns a **burn pool** (radius = 30 m, lifetime = 8 s).
 Every frame we iterate over enemies inside the ring and apply a *quadratic* heat fall‑off:
