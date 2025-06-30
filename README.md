@@ -28,7 +28,7 @@ A playground for experimenting and prototyping real-time 3D graphics in Three.js
 
 ## Quick Start
 
-[Here](https://cogsp.github.io/rogue-like-ig/), or clone the repo and launch `index.html`.
+[Here](https://cogsp.github.io/computer-graphics-sandbox/), or clone the repo and launch `index.html`.
 
 ## Project Layout
 
