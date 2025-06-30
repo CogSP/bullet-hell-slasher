@@ -1,6 +1,6 @@
-# Rogue-Like Shooter – Three.js Project
+# Computer Graphics Sandbox
 
-A top-down rogue-like built with **Three.js** from scratch. The game mixes arcade action with light RPG mechanics (XP, levels, power-ups) while showcasing several real-time graphics techniques and gameplay systems.
+A playground for experimenting and prototyping real-time 3D graphics in Three.js. Mainly based on a top-down rogue-like game, developed for the "Interactive Graphics" course in Sapienza University of Rome, a.y. 2024-2025. The game was build from scratch, mixing arcade action with light RPG mechanics (XP, levels, power-ups) while showcasing several real-time graphics techniques and gameplay systems.
 
 ---
 
@@ -86,7 +86,9 @@ Keyboard shortcuts
 | Mouse wheel | Zoom (orthographic scale) |
 | RMB drag    | Pan in Fixed mode         |
 
-<video src="demos/camera_system/camera_system_1k.mp4" width="640" controls loop></video>
+<!-- <video src="demos/camera_system/camera_system_1k.mp4" width="640" controls loop></video> -->
+
+![Camera System](demos/camera_system/camera_system_1k.gif)
 
 ---
 
@@ -175,7 +177,9 @@ this.velocity.multiplyScalar(Math.exp(-4 * dt)); // τ ≈ 0.25 s
 
   Enemies far away waste fewer cycles on path refreshes.
 
-<video src="demos/A_star/A_star_demo_1k.mp4" width="640" controls loop></video>
+<!-- <video src="demos/A_star/A_star_demo_1k.mp4" width="640" controls loop></video> -->
+
+![A* demo](demos/A_star/A_star_demo_1k.gif)
 
 ---
 
