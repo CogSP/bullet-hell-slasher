@@ -88,7 +88,7 @@ Keyboard shortcuts
 
 <!-- <video src="demos/camera_system/camera_system_1k.mp4" width="640" controls loop></video> -->
 
-![Camera System](demos/camera_system/camera_system_1k.gif)
+![Camera System](demos/camera_system/camera_system_480.gif)
 
 ---
 
@@ -179,7 +179,7 @@ this.velocity.multiplyScalar(Math.exp(-4 * dt)); // τ ≈ 0.25 s
 
 <!-- <video src="demos/A_star/A_star_demo_1k.mp4" width="640" controls loop></video> -->
 
-![A* demo](demos/A_star/A_star_demo_1k.gif)
+![A* demo](demos/A_star/A_star_demo_480.gif)
 
 ---
 
